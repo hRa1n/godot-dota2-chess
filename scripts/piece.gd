@@ -3,12 +3,18 @@ extends Node2D
 ## 一个棋子 = 一个角色。只负责自己的状态和绘制，规则在 game.gd。
 
 const FONT := preload("res://assets/fonts/NotoSansSC-Subset.otf")
+## 棋子图标（原创矢量图）。士兵按阵营区分：[天辉, 夜魇]
+const ICONS := {
+	"zeus": [preload("res://assets/icons/zeus.svg"), preload("res://assets/icons/zeus.svg")],
+	"chaos_knight": [preload("res://assets/icons/knight.svg"), preload("res://assets/icons/knight.svg")],
+	"soldier": [preload("res://assets/icons/creep_radiant.svg"), preload("res://assets/icons/creep_dire.svg")],
+}
 
 var type_id := ""
 var def: Dictionary
 var team := 0
 var team_color := Color.WHITE
-var label_name := ""        # 例：蓝·宙斯、红·士兵2
+var label_name := ""        # 例：天辉·宙斯、夜魇·士兵2
 var cell := Vector2i.ZERO
 var hp := 1
 var max_hp := 1
@@ -21,6 +27,11 @@ var alive := true
 var is_hero := false
 var highlight := false      # 本回合正在行动
 var cell_size := 48
+var _icon: Texture2D
+
+## 头像替换：把图片放到 assets/portraits/ 下即可覆盖默认图标（像素图会自动用清晰的最近邻缩放）
+##   zeus.png / chaos_knight.png / soldier_radiant.png / soldier_dire.png
+const PORTRAIT_DIR := "res://assets/portraits/"
 
 
 func setup(p_type: String, p_team: int, p_color: Color, p_label: String, p_cell_size: int) -> void:
@@ -37,6 +48,14 @@ func setup(p_type: String, p_team: int, p_color: Color, p_label: String, p_cell_
 	cards = def["cards"]
 	is_hero = def["hero"]
 	z_index = 1
+	_icon = ICONS[type_id][team]
+	var file := type_id
+	if type_id == "soldier":
+		file = "soldier_radiant" if team == 0 else "soldier_dire"
+	var path := PORTRAIT_DIR + file + ".png"
+	if ResourceLoader.exists(path):
+		_icon = load(path)
+		texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 
 
 func cooldown_of(card_id: String) -> int:
@@ -69,16 +88,14 @@ func _draw() -> void:
 	var r := cell_size * (0.42 if is_hero else 0.32)
 
 	if highlight:
-		draw_circle(Vector2.ZERO, r + 6, Color(0.98, 0.8, 0.08, 0.45))
-	draw_circle(Vector2(2, 3), r, Color(0, 0, 0, 0.25))       # 阴影
-	draw_circle(Vector2.ZERO, r, team_color)
-	draw_arc(Vector2.ZERO, r, 0, TAU, 40, Color.WHITE, 2.5 if is_hero else 1.5)
+		draw_circle(Vector2.ZERO, r + 6, Color(0.98, 0.8, 0.08, 0.5))
+	draw_circle(Vector2(2, 3), r, Color(0, 0, 0, 0.3))        # 阴影
+	draw_circle(Vector2.ZERO, r, team_color)                   # 阵营色外圈
+	draw_circle(Vector2.ZERO, r - 3.5, Color("#0f172a"))       # 深色底
+	draw_arc(Vector2.ZERO, r, 0, TAU, 48, Color("#fbbf24") if is_hero else Color(1, 1, 1, 0.75), 2.5 if is_hero else 1.5)
 
-	var short: String = def["short"]
-	var fs := 22 if is_hero else 15
-	var w := FONT.get_string_size(short, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-	var baseline := (FONT.get_ascent(fs) - FONT.get_descent(fs)) * 0.5
-	draw_string(FONT, Vector2(-w * 0.5, baseline), short, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color.WHITE)
+	var s := (r - 4) * 1.6
+	draw_texture_rect(_icon, Rect2(-s * 0.5, -s * 0.5, s, s), false)
 
 	# 血条（血量少时按格显示，一格 = 1 点血）
 	var bw := cell_size * 0.82

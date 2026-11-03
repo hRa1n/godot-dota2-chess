@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="blade" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#94a3b8"/>
+    </linearGradient>
+  </defs>
+  <!-- 剑身 -->
+  <path d="M52 6 L58 6 L58 12 L26 44 L20 38 Z" fill="url(#blade)" stroke="#334155" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M55 9 L24 40" stroke="#ffffff" stroke-width="1.2" opacity="0.9"/>
+  <!-- 护手 -->
+  <path d="M14 36 L28 50" stroke="#b45309" stroke-width="6" stroke-linecap="round"/>
+  <!-- 剑柄 -->
+  <path d="M20 44 L9 55" stroke="#78350f" stroke-width="5" stroke-linecap="round"/>
+  <circle cx="7.5" cy="56.5" r="4" fill="#f59e0b" stroke="#78350f" stroke-width="2"/>
+  <!-- 闪光 -->
+  <path d="M48 20 l2 -5 l2 5 l5 2 l-5 2 l-2 5 l-2 -5 l-5 -2 Z" fill="#fef9c3"/>
+</svg>

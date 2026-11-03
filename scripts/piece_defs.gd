@@ -38,6 +38,8 @@ const CARDS := {
 		"range": 1, "area": "square", "cooldown": 0, "effect": "damage",
 		"damage": 2, "damage_type": "physical",
 		"summary": "3x3范围 · 物理伤害2",
+		"card_text": "对周围 3x3 内一名敌人造成 2 点物理伤害",
+		"art": "sword",
 		"desc": "对自身周围 3x3 范围内的一名敌人造成 2 点物理伤害（物理伤害会被防御抵消，至少 1 点）。",
 	},
 

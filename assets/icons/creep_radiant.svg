@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#86efac"/>
+      <stop offset="1" stop-color="#15803d"/>
+    </linearGradient>
+  </defs>
+  <!-- 盾 -->
+  <path d="M32 5 L54 13 V31 C54 45 44 54 32 60 C20 54 10 45 10 31 V13 Z" fill="url(#g)" stroke="#fef3c7" stroke-width="3" stroke-linejoin="round"/>
+  <!-- 叶形纹样 -->
+  <path d="M32 16 C41 22 41 36 32 46 C23 36 23 22 32 16 Z" fill="#f0fdf4" opacity="0.9"/>
+  <path d="M32 19 V44" stroke="#15803d" stroke-width="2"/>
+  <path d="M32 28 L37 24 M32 34 L27 30 M32 38 L37 35" stroke="#15803d" stroke-width="1.6" stroke-linecap="round"/>
+</svg>

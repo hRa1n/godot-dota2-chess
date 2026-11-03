@@ -7,8 +7,6 @@ signal card_pressed(card_id: String)
 signal end_turn_pressed
 signal restart_pressed
 
-const COLOR_ATTACK := Color("#b45309")
-const COLOR_SKILL := Color("#4338ca")
 const MAX_LOG := 60
 
 var turn_label: Label
@@ -16,7 +14,7 @@ var hint_label: Label
 var info_label: Label
 var capture_label: Label
 var log_label: RichTextLabel
-var card_bar: HBoxContainer
+var cards_flow: HFlowContainer
 var end_btn: Button
 var win_panel: PanelContainer
 var win_label: Label
@@ -48,15 +46,25 @@ func _ready() -> void:
 	capture_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	root.add_child(capture_label)
 
-	# 左侧：棋子信息
+	# 左侧一列：棋子信息 + 卡牌
+	var left := VBoxContainer.new()
+	left.position = Vector2(14, 84)
+	left.custom_minimum_size = Vector2(356, 0)
+	left.add_theme_constant_override("separation", 14)
+	left.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(left)
 	var info_panel := _panel()
-	info_panel.position = Vector2(12, 84)
-	info_panel.custom_minimum_size = Vector2(250, 0)
-	root.add_child(info_panel)
+	left.add_child(info_panel)
 	info_label = _label(15)
-	info_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	info_label.custom_minimum_size = Vector2(230, 0)
+	info_label.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
+	info_label.custom_minimum_size = Vector2(330, 0)
 	info_panel.add_child(info_label)
+	cards_flow = HFlowContainer.new()
+	cards_flow.custom_minimum_size = Vector2(356, 0)
+	cards_flow.add_theme_constant_override("h_separation", 14)
+	cards_flow.add_theme_constant_override("v_separation", 14)
+	cards_flow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	left.add_child(cards_flow)
 
 	# 右侧：战斗日志
 	var log_panel := _panel()
@@ -74,20 +82,6 @@ func _ready() -> void:
 	log_label.add_theme_font_size_override("normal_font_size", 13)
 	log_label.add_theme_font_size_override("bold_font_size", 13)
 	log_panel.add_child(log_label)
-
-	# 底部：卡牌栏
-	card_bar = HBoxContainer.new()
-	card_bar.anchor_top = 1.0
-	card_bar.anchor_bottom = 1.0
-	card_bar.anchor_right = 1.0
-	card_bar.offset_left = 12
-	card_bar.offset_right = -170
-	card_bar.offset_top = -122
-	card_bar.offset_bottom = -14
-	card_bar.alignment = BoxContainer.ALIGNMENT_CENTER
-	card_bar.add_theme_constant_override("separation", 10)
-	card_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root.add_child(card_bar)
 
 	# 右下：结束回合
 	end_btn = Button.new()
@@ -157,23 +151,16 @@ func add_log(text: String) -> void:
 	log_label.text = "\n".join(_log_lines)
 
 
-## cards: [{id, name, kind, summary, desc, status, enabled, selecting}]
+## cards: 见 CardView.info 的字段说明
 func set_cards(cards: Array) -> void:
-	for c in card_bar.get_children():
+	for c in cards_flow.get_children():
+		cards_flow.remove_child(c)
 		c.queue_free()
 	for c in cards:
-		var b := Button.new()
-		b.focus_mode = Control.FOCUS_NONE
-		b.custom_minimum_size = Vector2(168, 104)
-		b.clip_text = false
-		var tag := "【攻击】" if c["kind"] == "attack" else "【技能】"
-		b.text = "%s%s\n%s\n%s" % [tag, c["name"], c["summary"], c["status"]]
-		b.tooltip_text = c["desc"]
-		b.disabled = not c["enabled"]
-		b.add_theme_font_size_override("font_size", 14)
-		_style_button(b, COLOR_ATTACK if c["kind"] == "attack" else COLOR_SKILL, c["selecting"])
-		b.pressed.connect(card_pressed.emit.bind(c["id"]))
-		card_bar.add_child(b)
+		var v := CardView.new()
+		v.setup(c)
+		v.clicked.connect(card_pressed.emit)
+		cards_flow.add_child(v)
 
 
 func show_winner(text: String, color: Color) -> void:

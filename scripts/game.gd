@@ -6,34 +6,35 @@ extends Node2D
 ##   - 这个棋子本回合可以：移动一次（可选）+ 使用一张自己的卡牌（可选），顺序不限
 ##   - 一旦移动或出牌，本回合就锁定为这个棋子
 ##   - 移动和出牌都用完后自动结束回合，也可以随时点「结束回合」
+## 阵营：天辉在下，夜魇在上
 ## 泉水：每方回合开始时，己方泉水周围 5x5 内的己方棋子 +2 血，并随机打范围内一个敌人 5 血
 ## 能量圈：地图正中。棋子站上去后，连续 2 个己方回合开始时仍站在上面 → 获胜
 ## 另外：对方棋子全部阵亡也直接获胜
-## 坐标：内部从 0 开始；界面和日志显示从 1 开始（1~21）
+## 坐标：内部 Vector2i(列, 行) 从 0 开始；界面和日志显示为「行-列」，从 1 开始
 
 const FloatText := preload("res://scripts/float_text.gd")
 
 enum Team { BLUE, RED }
-const TEAM_NAME := ["蓝方", "红方"]
-const TEAM_SHORT := ["蓝", "红"]
-const TEAM_COLOR := [Color("#2563eb"), Color("#dc2626")]
-## 泉水位置（显示坐标 1-11 和 21-11）
-const FOUNTAIN_CELLS := [Vector2i(0, 10), Vector2i(20, 10)]
+const TEAM_NAME := ["天辉", "夜魇"]
+const TEAM_SHORT := ["天辉", "夜魇"]
+const TEAM_COLOR := [Color("#16a34a"), Color("#b91c1c")]
+## 泉水位置：天辉在下边中间（11-6），夜魇在上边中间（1-6）
+const FOUNTAIN_CELLS := [Vector2i(5, 10), Vector2i(5, 0)]
 const FOUNTAIN_RADIUS := 2      # 周围 5x5（贴边时只有棋盘内的部分）
 const FOUNTAIN_HEAL := 2
 const FOUNTAIN_DAMAGE := 5
-## 能量圈（显示坐标 11-11）
-const ENERGY_CELL := Vector2i(10, 10)
+## 能量圈：正中（6-6）
+const ENERGY_CELL := Vector2i(5, 5)
 const CAPTURE_TURNS := 2
 
-## 蓝方开局布置（红方左右镜像）
+## 天辉开局布置（夜魇上下镜像）
 const LAYOUT := [
-	["zeus", Vector2i(1, 9)],
-	["chaos_knight", Vector2i(1, 11)],
-	["soldier", Vector2i(2, 7)],
-	["soldier", Vector2i(2, 13)],
-	["soldier", Vector2i(3, 9)],
-	["soldier", Vector2i(3, 11)],
+	["zeus", Vector2i(4, 9)],
+	["chaos_knight", Vector2i(6, 9)],
+	["soldier", Vector2i(2, 8)],
+	["soldier", Vector2i(4, 8)],
+	["soldier", Vector2i(6, 8)],
+	["soldier", Vector2i(8, 8)],
 ]
 
 const OVERLAY_MOVE := Color(0.13, 0.65, 0.3, 0.38)
@@ -94,7 +95,7 @@ func _spawn_all() -> void:
 			var type_id: String = entry[0]
 			var cell: Vector2i = entry[1]
 			if team == Team.RED:
-				cell = Vector2i(Board.COLS - 1 - cell.x, cell.y)
+				cell = Vector2i(cell.x, Board.ROWS - 1 - cell.y)
 			var name_cn: String = PieceDefs.PIECES[type_id]["name"]
 			if type_id == "soldier":
 				soldier_no += 1
@@ -120,9 +121,9 @@ func is_blocked(cell: Vector2i) -> bool:
 	return not board.is_in_bounds(cell) or FOUNTAIN_CELLS.has(cell) or piece_at(cell) != null
 
 
-## 显示用坐标（从 1 开始）
+## 显示用坐标：「行-列」，从 1 开始
 static func fmt(c: Vector2i) -> String:
-	return "(%d, %d)" % [c.x + 1, c.y + 1]
+	return "%d-%d" % [c.y + 1, c.x + 1]
 
 
 static func manhattan(a: Vector2i, b: Vector2i) -> int:
@@ -574,9 +575,19 @@ func _refresh_view() -> void:
 				status = "本回合已出牌"
 			elif not can_control(selected):
 				status = "本回合不可用"
+			var rng: int = card["range"]
+			var range_text := str(rng)
+			if card["target"] == "none":
+				range_text = "全场"
+			elif card.get("area", "diamond") == "square":
+				range_text = "%dx%d" % [rng * 2 + 1, rng * 2 + 1]
 			list.append({
 				"id": id, "name": card["name"], "kind": card["kind"],
-				"summary": card["summary"], "desc": card["desc"], "status": status,
+				"card_text": card.get("card_text", card["summary"]), "desc": card["desc"],
+				"art": card.get("art", "sword"),
+				"damage": card.get("damage", card.get("max", 0)), "range_text": range_text,
+				"cooldown_total": card["cooldown"],
+				"status": status,
 				"enabled": card_usable(selected, id), "selecting": pending_card == id,
 			})
 	hud.set_cards(list)
@@ -601,13 +612,13 @@ func _hint_text() -> String:
 	if not has_moved:
 		parts.append("点绿色格子移动")
 	if not has_used_card:
-		parts.append("点下方卡牌出牌")
+		parts.append("点左侧卡牌出牌")
 	return "，".join(parts) if parts.size() > 0 else "行动完成"
 
 
 func _info_text(p: Piece) -> String:
 	if p == null or not p.alive:
-		return ("未选择棋子\n\n泉水：蓝方 %s，红方 %s。每个己方回合开始，周围 5x5 内己方棋子 +%d 血，并随机攻击范围内一个敌人 %d 血。\n\n胜利：站上中央能量圈 %s，连续 %d 个己方回合开始时仍在上面；或消灭对方全部棋子。") % [
+		return ("未选择棋子\n\n坐标格式：行-列\n泉水：天辉 %s（下），夜魇 %s（上）。每个己方回合开始，周围 5x5 内己方棋子 +%d 血，并随机攻击范围内一个敌人 %d 血。\n\n胜利：站上中央能量圈 %s，连续 %d 个己方回合开始时仍在上面；或消灭对方全部棋子。") % [
 			fmt(FOUNTAIN_CELLS[0]), fmt(FOUNTAIN_CELLS[1]), FOUNTAIN_HEAL, FOUNTAIN_DAMAGE, fmt(ENERGY_CELL), CAPTURE_TURNS]
 	var role := "英雄" if p.is_hero else "士兵"
 	var state := "正常" if p.stun == 0 else "眩晕（剩 %d 回合）" % p.stun

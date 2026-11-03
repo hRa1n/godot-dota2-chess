@@ -55,27 +55,29 @@ func _run() -> void:
 		if p.max_hp != 5 or p.defense != 0 or p.move != 5 or p.cards != ["basic_attack"]:
 			all_ok = false
 	check(all_ok, "所有棋子 血量5 / 防御0 / 移动5，只有基础攻击卡")
-	check(game.FOUNTAIN_CELLS[0] == Vector2i(0, 10) and game.FOUNTAIN_CELLS[1] == Vector2i(20, 10), "泉水在 1-11 和 21-11")
-	check(game.ENERGY_CELL == Vector2i(10, 10), "能量圈在正中 11-11")
-	var b_ck := find("蓝·混沌骑士")
-	var r_ck := find("红·混沌骑士")
-	check(r_ck.cell == Vector2i(20 - b_ck.cell.x, b_ck.cell.y), "红方左右镜像布置")
+	check(game.FOUNTAIN_CELLS[0] == Vector2i(5, 10) and game.FOUNTAIN_CELLS[1] == Vector2i(5, 0), "泉水在下边中间（天辉）和上边中间（夜魇）")
+	check(game.ENERGY_CELL == Vector2i(5, 5), "能量圈在正中 6-6")
+	check(Board.COLS == 11 and Board.ROWS == 11, "地图 11x11")
+	var b_ck := find("天辉·混沌骑士")
+	var r_ck := find("夜魇·混沌骑士")
+	check(r_ck.cell == Vector2i(b_ck.cell.x, 10 - b_ck.cell.y), "夜魇上下镜像布置")
+	check(game.fmt(Vector2i(5, 0)) == "1-6", "坐标显示为 行-列")
 
 	print("[移动]")
-	place(b_ck, Vector2i(8, 4))      # 空旷处
+	place(b_ck, Vector2i(0, 4))      # 空旷处
 	game._on_cell_clicked(b_ck.cell)
 	check(game.move_cells.has(b_ck.cell + Vector2i(5, 0)), "可以走 5 格")
 	check(not game.move_cells.has(b_ck.cell + Vector2i(6, 0)), "不能走 6 格")
 
 	print("[基础攻击：3x3 范围，物理伤害 2]")
-	var r_s1 := find("红·士兵1")
-	place(b_ck, Vector2i(10, 5))
-	place(r_s1, Vector2i(11, 6))     # 斜角
+	var r_s1 := find("夜魇·士兵1")
+	place(b_ck, Vector2i(3, 4))
+	place(r_s1, Vector2i(4, 5))      # 斜角
 	game._select(b_ck)
 	game._on_card_pressed("basic_attack")
-	check(game.target_cells.has(Vector2i(11, 6)), "斜角相邻的敌人可以攻击")
+	check(game.target_cells.has(Vector2i(4, 5)), "斜角相邻的敌人可以攻击")
 	check(game.range_cells.size() == 8, "攻击范围是周围 8 格（3x3）")
-	game._on_cell_clicked(Vector2i(11, 6))
+	game._on_cell_clicked(Vector2i(4, 5))
 	check(r_s1.hp == 3, "造成 2 点伤害，剩 %d" % r_s1.hp)
 	game.end_turn()
 	game.end_turn()
@@ -92,22 +94,22 @@ func _run() -> void:
 	game._on_cell_clicked(r_s1.cell)
 	check(r_s1.hp == 1, "防御高于伤害时至少 1 点，剩 %d" % r_s1.hp)
 	r_s1.defense = 0
-	place(r_s1, Vector2i(12, 7))     # 距离 2
+	place(r_s1, Vector2i(5, 6))      # 距离 2
 	game.end_turn()
 	game.end_turn()
 	game._select(b_ck)
 	game._on_card_pressed("basic_attack")
-	check(not game.target_cells.has(Vector2i(12, 7)), "2 格外的敌人打不到")
+	check(not game.target_cells.has(Vector2i(5, 6)), "2 格外的敌人打不到")
 	game._cancel_targeting()
 
 	print("[泉水]")
 	await new_game()
-	var b_zeus := find("蓝·宙斯")
+	var b_zeus := find("天辉·宙斯")
 	b_zeus.hp = 2
-	var r_a := find("红·士兵1")
-	var r_b := find("红·士兵2")
-	place(r_a, Vector2i(2, 9))
-	place(r_b, Vector2i(2, 11))
+	var r_a := find("夜魇·士兵1")
+	var r_b := find("夜魇·士兵2")
+	place(r_a, Vector2i(3, 9))
+	place(r_b, Vector2i(7, 9))
 	game.end_turn()   # -> 红方
 	game.end_turn()   # -> 蓝方回合开始，泉水结算
 	check(b_zeus.hp == 4, "范围内友军 +2 血（2 -> %d）" % b_zeus.hp)
@@ -118,21 +120,21 @@ func _run() -> void:
 	game.end_turn()
 	game.end_turn()
 	check(b_zeus.hp == 5, "回血不超过上限")
-	r_ck = find("红·混沌骑士")
-	place(find("红·士兵3"), Vector2i(3, 13))   # 范围外
-	var s3_hp := find("红·士兵3").hp
+	r_ck = find("夜魇·混沌骑士")
+	place(find("夜魇·士兵3"), Vector2i(5, 7))    # 范围外
+	var s3_hp := find("夜魇·士兵3").hp
 	game.end_turn()
 	game.end_turn()
-	check(find("红·士兵3").hp == s3_hp, "范围外的敌人不受伤")
+	check(find("夜魇·士兵3").hp == s3_hp, "范围外的敌人不受伤")
 
 	print("[能量圈]")
 	await new_game()
-	b_ck = find("蓝·混沌骑士")
-	place(b_ck, Vector2i(7, 10))
+	b_ck = find("天辉·混沌骑士")
+	place(b_ck, Vector2i(2, 5))
 	game._select(b_ck)
-	game._on_cell_clicked(Vector2i(10, 10))   # 走上能量圈
+	game._on_cell_clicked(Vector2i(5, 5))    # 走上能量圈
 	await wait(0.4)
-	check(b_ck.cell == Vector2i(10, 10), "能量圈可以站上去")
+	check(b_ck.cell == Vector2i(5, 5), "能量圈可以站上去")
 	check(game.capture_count == 0, "站上去当回合不计数")
 	game.end_turn()            # 红方
 	check(game.capture_count == 0, "对方回合不计数")
@@ -144,20 +146,20 @@ func _run() -> void:
 
 	print("[离开能量圈清零]")
 	await new_game()
-	b_ck = find("蓝·混沌骑士")
-	place(b_ck, Vector2i(10, 10))
+	b_ck = find("天辉·混沌骑士")
+	place(b_ck, Vector2i(5, 5))
 	game.end_turn()
 	game.end_turn()
 	check(game.capture_count == 1, "计到 1/2")
 	game._select(b_ck)
-	game._on_cell_clicked(Vector2i(10, 12))
+	game._on_cell_clicked(Vector2i(5, 7))
 	await wait(0.4)
 	game.end_turn()
 	game.end_turn()
 	check(game.capture_count == 0 and not game.game_over, "离开后清零")
 
 	print("[被打死清零]")
-	place(b_ck, Vector2i(10, 10))
+	place(b_ck, Vector2i(5, 5))
 	game.end_turn()
 	game.end_turn()
 	check(game.capture_count == 1, "重新占领计 1/2")

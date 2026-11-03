@@ -1,13 +1,13 @@
 class_name Board
 extends Node2D
-## 21x21 棋盘：负责格子坐标换算、绘制（格子、泉水、能量圈、高亮）、把点击/悬停转成格子坐标。
+## 11x11 棋盘：负责格子坐标换算、绘制（格子、泉水、能量圈、高亮）、把点击/悬停转成格子坐标。
 ## 棋盘本身不管游戏规则，规则在 game.gd 里。
 
 signal cell_hovered(cell: Vector2i)
 signal cell_clicked(cell: Vector2i)
 
-const COLS := 21
-const ROWS := 21
+const COLS := 11
+const ROWS := 11
 const NO_CELL := Vector2i(-1, -1)
 const FONT := preload("res://assets/fonts/NotoSansSC-Subset.otf")
 
