@@ -20,7 +20,7 @@
    godot --headless -s res://tests/test_rules.gd
    ```
    改了规则要在 `tests/test_rules.gd` 里补测试。测试坐标是内部坐标 `Vector2i(列, 行)`，从 0 开始；界面显示为「行-列」，从 1 开始。
-3. 推送到 `main`，GitHub Actions 会自动导出网页版并发布到 GitHub Pages：（GitHub Pages 地址见仓库 Settings → Pages）
+3. 推送到 `main`，GitHub Actions 会自动导出网页版并发布到 GitHub Pages（地址见仓库 Settings → Pages）
 4. 作者刷新链接试玩。
 
 其他约定：

@@ -2,7 +2,7 @@
 
 用 Godot 4.7 制作的回合制卡牌棋子游戏（MOBA 风格），免费、非商业的同人作品。
 
-**在线试玩：（GitHub Pages 地址见仓库 Settings → Pages）**目前是本地双人（同一台设备轮流操作）的测试版。
+**在线试玩**：GitHub Pages 地址见仓库 Settings → Pages。目前是本地双人（同一台设备轮流操作）的测试版。
 
 ## 规则（当前版本）
 
@@ -129,7 +129,7 @@ godot --headless -s res://tests/test_rules.gd
 
 ## 特效预览
 
-试玩链接后面加 `#fxdemo`（（试玩链接）#fxdemo ）会进入特效预览：循环播放每张卡的施法特效。
+试玩链接后面加 `#fxdemo` 会进入特效预览：循环播放每张卡的施法特效。
 
 ## 网页试玩
 
