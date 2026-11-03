@@ -65,7 +65,8 @@
 - `assets/icons/`：原创矢量图标（宙斯=闪电，混沌骑士=马首，天辉小兵=绿盾，夜魇小兵=红盾，卡面=剑）
 - `assets/portraits/`：头像替换目录，放入同名 PNG 即可覆盖默认图标，说明见该目录的 README
 - [`资源/dota2-minimap-hero-sprites/`](资源/dota2-minimap-hero-sprites/)：Dota 2 小地图英雄像素头像（32×32，127 个英雄 + 50 张变体，Valve 素材），来源、内部代号对照和用法见[该目录的 README](资源/dota2-minimap-hero-sprites/README.md)
-- [`资源/fountain/`](资源/fountain/)：像素风泉水图（天辉 / 夜魇各一张，1254×1254），说明见[该目录的 README](资源/fountain/README.md)
+- [`资源/fountain/`](资源/fountain/)：像素风泉水图原图（天辉 / 夜魇各一张，1254×1254），游戏里用的是缩小到 192×192 的 `assets/fountain/`，说明见[该目录的 README](资源/fountain/README.md)
+- `资源/` 目录只存原始素材，不打进网页导出包；游戏实际使用的图片都放在 `assets/` 下
 
 ## 版权说明
 

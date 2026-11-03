@@ -25,8 +25,9 @@ const COLOR_LABEL := Color("#f1f5f9")
 
 var hovered: Vector2i = NO_CELL
 var selected: Vector2i = NO_CELL
-## 泉水：格子 -> 阵营颜色
+## 泉水：格子 -> 阵营颜色；fountain_textures：格子 -> 泉水图（有图就画图，没有就画圆形标记）
 var fountains: Dictionary = {}
+var fountain_textures: Dictionary = {}
 var fountain_radius := 2
 ## 能量圈
 var energy_cell: Vector2i = NO_CELL
@@ -135,6 +136,11 @@ func _draw() -> void:
 	# 泉水本体
 	for f in fountains:
 		var col: Color = fountains[f]
+		if fountain_textures.has(f):
+			var r := cell_rect(f)
+			draw_texture_rect(fountain_textures[f], r.grow(-1), false)
+			draw_rect(r.grow(-1.5), col.lightened(0.2), false, 3.0)
+			continue
 		var center := cell_center(f)
 		var r := cell_size * 0.44
 		draw_circle(center, r, col.darkened(0.15))

@@ -103,6 +103,10 @@ func _ready() -> void:
 	randomize()
 	board.fountains = {FOUNTAIN_CELLS[0]: TEAM_COLOR[0], FOUNTAIN_CELLS[1]: TEAM_COLOR[1]}
 	board.fountain_radius = FOUNTAIN_RADIUS
+	board.fountain_textures = {
+		FOUNTAIN_CELLS[0]: load("res://assets/fountain/fountain_radiant.png"),
+		FOUNTAIN_CELLS[1]: load("res://assets/fountain/fountain_dire.png"),
+	}
 	board.energy_cell = ENERGY_CELL
 	board.cell_clicked.connect(_on_cell_clicked)
 	hud.card_pressed.connect(_on_card_pressed)
