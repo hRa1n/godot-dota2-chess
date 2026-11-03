@@ -314,8 +314,8 @@ func flash(color: Color, strength := 0.55) -> void:
 	create_tween().tween_property(flash_rect, "color:a", 0.0, 0.45)
 
 
-func play_draw(results: Array, title: String, color: Color) -> void:
-	draw_overlay.play(results, title, color)
+func play_pick(offers: Array, picks: int, resolver: Callable, title: String, color: Color) -> void:
+	draw_overlay.play(offers, picks, resolver, title, color)
 
 
 func set_ap(move_left: bool, action_left: bool, who: String, color: Color) -> void:

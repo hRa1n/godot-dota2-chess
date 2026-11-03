@@ -2,7 +2,7 @@ extends Node2D
 ## 游戏主控：回合流程、牌库/手牌、棋子行动、卡牌结算、泉水、能量圈、胜负。
 ##
 ## 回合规则：
-##   - 每方回合开始：泉水结算 → 能量圈结算 → 从本方牌库抽 2 张资源卡
+##   - 每方回合开始：泉水结算 → 能量圈结算 → 抽卡：亮出牌库顶 5 张背面牌，玩家翻开 2 张，其余放回牌库底
 ##       抽到技能卡：对应英雄永久解锁这个技能（加入它的行动卡，不进手牌）
 ##       抽到装备卡：进手牌（上限 8）
 ##   - 每回合只能操作【一个】己方棋子：移动一次（可选）+ 一个行动（可选），顺序不限
@@ -34,6 +34,7 @@ const ENERGY_CELL := Vector2i(5, 5)
 const CAPTURE_TURNS := 2
 ## 抽牌
 const DRAW_PER_TURN := 2
+const OFFER_SIZE := 5           # 抽卡时亮出几张背面牌让玩家挑
 const HAND_LIMIT := 8
 const MAX_EQUIP := 6
 const RESPAWN_TURNS := 2
@@ -121,6 +122,7 @@ func _ready() -> void:
 	hud.end_turn_pressed.connect(end_turn)
 	hud.restart_pressed.connect(func(): get_tree().reload_current_scene())
 	hud.draw_overlay.sfx = sfx
+	hud.draw_overlay.finished.connect(_on_pick_finished)
 	_spawn_all()
 	_build_decks()
 	if _url_hash() == "#fxdemo":     # 特效预览：网址末尾加 #fxdemo
@@ -222,42 +224,99 @@ func _hand_entry(team: int, uid: int) -> Dictionary:
 	return {}
 
 
-## 抽牌并结算；返回给抽卡演出用的结果 [{info, kind, caption}]
+## 从牌库顶拿一张（牌库空了先把弃牌洗回去）；没牌返回 ""
+func _pop_deck(team: int) -> String:
+	if decks[team].is_empty():
+		if discards[team].is_empty():
+			return ""
+		decks[team] = discards[team]
+		discards[team] = []
+		decks[team].shuffle()
+		_log("%s 弃牌堆洗回牌库" % TEAM_NAME[team])
+	return decks[team].pop_back()
+
+
+## 结算一张抽到的牌：技能 → 解锁；装备 → 进手牌（满了弃掉）。返回 {info, kind, caption, log}
+func _apply_drawn(team: int, id: String) -> Dictionary:
+	var card: Dictionary = PieceDefs.CARDS[id]
+	var card_name: String = card["name"]
+	if card["kind"] == "skill":
+		var msg := _unlock_skill(team, id)
+		var unlocked := not msg.ends_with("弃掉）")
+		var hero_name: String = PieceDefs.PIECES[card["owner"]]["name"]
+		return {"info": _card_info(id, -1), "kind": "skill" if unlocked else "burn", "log": msg,
+			"caption": ("%s 解锁技能！" % hero_name) if unlocked else "已解锁过 · 弃掉"}
+	if hands[team].size() >= HAND_LIMIT:
+		discards[team].append(id)
+		return {"info": _card_info(id, -1), "kind": "burn", "caption": "手牌已满 · 弃掉",
+			"log": "【%s】（手牌已满，弃掉）" % card_name}
+	give_card(team, id)
+	return {"info": _card_info(id, -1), "kind": "equip", "log": "【%s】" % card_name,
+		"caption": "消耗品" if card.get("consumable", false) else "获得装备"}
+
+
+## 直接抽 n 张（不让玩家挑；测试和没有演出时用）
 func _draw_cards(team: int, n: int) -> Array:
 	var results := []
 	var got := []
 	for i in n:
-		if decks[team].is_empty():
-			if discards[team].is_empty():
-				_log("%s 牌库和弃牌堆都空了，无牌可抽" % TEAM_NAME[team])
-				break
-			decks[team] = discards[team]
-			discards[team] = []
-			decks[team].shuffle()
-			_log("%s 弃牌堆洗回牌库" % TEAM_NAME[team])
-		var id: String = decks[team].pop_back()
-		var card: Dictionary = PieceDefs.CARDS[id]
-		var card_name: String = card["name"]
-		if card["kind"] == "skill":
-			var msg := _unlock_skill(team, id)
-			got.append(msg)
-			var unlocked := not msg.ends_with("弃掉）")
-			var hero_name: String = PieceDefs.PIECES[card["owner"]]["name"]
-			results.append({"info": _card_info(id, -1), "kind": "skill" if unlocked else "burn",
-				"caption": ("%s 解锁技能！" % hero_name) if unlocked else "已解锁过 · 弃掉"})
-			continue
-		if hands[team].size() >= HAND_LIMIT:
-			discards[team].append(id)
-			_log("手牌已满，【%s】被弃掉" % card_name)
-			results.append({"info": _card_info(id, -1), "kind": "burn", "caption": "手牌已满 · 弃掉"})
-		else:
-			give_card(team, id)
-			got.append("【%s】" % card_name)
-			results.append({"info": _card_info(id, -1), "kind": "equip",
-				"caption": "消耗品" if card.get("consumable", false) else "获得装备"})
+		var id := _pop_deck(team)
+		if id == "":
+			_log("%s 牌库和弃牌堆都空了，无牌可抽" % TEAM_NAME[team])
+			break
+		var r := _apply_drawn(team, id)
+		results.append(r)
+		got.append(r["log"])
 	if not got.is_empty():
 		_log("%s 抽牌：%s（手牌 %d/%d）" % [TEAM_NAME[team], "、".join(got), hands[team].size(), HAND_LIMIT])
 	return results
+
+
+# ---------- 翻牌式抽卡：亮出 OFFER_SIZE 张背面牌，玩家挑 DRAW_PER_TURN 张 ----------
+
+var _offer: Array = []          # 本回合亮出来的牌 id
+var _offer_team := 0
+var _offer_got: Array = []      # 已选牌的日志
+
+
+func _start_pick_draw(team: int) -> void:
+	_offer = []
+	for i in OFFER_SIZE:
+		var id := _pop_deck(team)
+		if id == "":
+			break
+		_offer.append(id)
+	if _offer.is_empty():
+		_log("%s 牌库和弃牌堆都空了，无牌可抽" % TEAM_NAME[team])
+		return
+	_offer_team = team
+	_offer_got = []
+	var infos := []
+	for id in _offer:
+		infos.append(_card_info(id, -1))
+	hud.play_pick(infos, DRAW_PER_TURN, _on_offer_picked,
+		"%s · 第 %d 回合抽卡" % [TEAM_NAME[team], round_no], TEAM_COLOR[team])
+
+
+## 玩家翻开了第 i 张：立即结算，把结果交给演出显示
+func _on_offer_picked(i: int) -> Dictionary:
+	var r := _apply_drawn(_offer_team, _offer[i])
+	_offer_got.append(r["log"])
+	_refresh_view()
+	return r
+
+
+## 演出结束：没选的牌放回牌库底
+func _on_pick_finished(picked: Array) -> void:
+	var back := 0
+	for i in _offer.size():
+		if not picked.has(i):
+			decks[_offer_team].push_front(_offer[i])
+			back += 1
+	_log("%s 抽牌：%s（手牌 %d/%d）%s" % [TEAM_NAME[_offer_team], "、".join(_offer_got),
+		hands[_offer_team].size(), HAND_LIMIT, "，其余 %d 张放回牌库底" % back if back > 0 else ""])
+	_offer = []
+	_refresh_view()
 
 
 # ================= 查询 =================
@@ -363,9 +422,12 @@ func _start_turn() -> void:
 		return
 	if _capture_tick(current_team):
 		return
-	var drawn := _draw_cards(current_team, DRAW_PER_TURN)
 	_select(null)
-	hud.play_draw(drawn, "%s · 第 %d 回合抽牌" % [TEAM_NAME[current_team], round_no], TEAM_COLOR[current_team])
+	if fx_enabled:
+		_start_pick_draw(current_team)      # 翻牌式抽卡（玩家从 5 张里挑 2 张）
+	else:
+		_draw_cards(current_team, DRAW_PER_TURN)
+		_refresh_view()
 
 	var can_act := false
 	for p in pieces:
@@ -1287,7 +1349,7 @@ func _hint_text() -> String:
 
 func _info_text(p: Piece) -> String:
 	if p == null or not p.alive:
-		return ("未选择棋子\n\n坐标格式：行-列\n泉水：天辉 %s（下），夜魇 %s（上）。每个己方回合开始，周围 5x5 内己方棋子 +%d 血，并随机攻击范围内一个敌人 %d 血。\n\n每回合开始抽 %d 张资源卡：技能卡直接解锁给对应英雄（变成它的行动卡），装备卡进手牌。英雄最多 6 件装备，装上不能卸。英雄阵亡 2 个己方回合后在泉水旁复活。\n\n胜利：站上中央能量圈 %s，连续 %d 个己方回合开始时仍在上面；或消灭对方全部棋子。") % [
+		return ("未选择棋子\n\n坐标格式：行-列\n泉水：天辉 %s（下），夜魇 %s（上）。每个己方回合开始，周围 5x5 内己方棋子 +%d 血，并随机攻击范围内一个敌人 %d 血。\n\n每回合开始亮出 5 张背面牌，翻开 %d 张：技能卡直接解锁给对应英雄（变成它的行动卡），装备卡进手牌，其余放回牌库底。英雄最多 6 件装备，装上不能卸。英雄阵亡 2 个己方回合后在泉水旁复活。\n\n胜利：站上中央能量圈 %s，连续 %d 个己方回合开始时仍在上面；或消灭对方全部棋子。") % [
 			fmt(FOUNTAIN_CELLS[0]), fmt(FOUNTAIN_CELLS[1]), FOUNTAIN_HEAL, FOUNTAIN_DAMAGE, DRAW_PER_TURN, fmt(ENERGY_CELL), CAPTURE_TURNS]
 	var role := "英雄" if p.is_hero else ("召唤物" if p.type_id == "illusion" else "士兵")
 	var state := "正常" if p.stun == 0 else "眩晕（剩 %d 回合）" % p.stun

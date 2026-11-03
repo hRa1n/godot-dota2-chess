@@ -138,6 +138,26 @@ func _run() -> void:
 	game.end_turn()
 	check(game.hands[1].size() == game.HAND_LIMIT and game.discards[1].size() == disc + 1, "手牌上限 8 张，多抽的被弃掉")
 
+	print("[翻牌式抽卡：5 选 2]")
+	await new_game()
+	var d0: int = game.decks[0].size()
+	var h0: int = game.hands[0].size()
+	game._start_pick_draw(0)
+	check(game._offer.size() == 5 and game.decks[0].size() == d0 - 5, "亮出牌库顶 5 张")
+	var offer: Array = game._offer.duplicate()
+	game._on_offer_picked(1)
+	game._on_offer_picked(4)
+	game._on_pick_finished([1, 4])
+	check(game.decks[0].size() == d0 - 2, "选 2 张，其余 3 张放回牌库")
+	check(game.decks[0].slice(0, 3) == [offer[3], offer[2], offer[0]], "没选的牌放在牌库底")
+	var gained: int = game.hands[0].size() - h0
+	for p in game.pieces:
+		if p.team == 0:
+			gained += p.cards.size() - 1
+	check(gained >= 1, "选中的牌已结算（进手牌或解锁技能）")
+	game.hud.draw_overlay._clear()
+	game.hud.draw_overlay.visible = false
+
 	print("[基础攻击 + 移动]")
 	await new_game()
 	var zeus := find("天辉·宙斯")
