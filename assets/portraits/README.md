@@ -10,8 +10,10 @@
 | chaos_knight.png | 混沌骑士（幻象也用它） | Dota 2 小地图头像 |
 | axe.png | 斧王 | Dota 2 小地图头像 |
 | pudge.png | 屠夫 | Dota 2 小地图头像 |
-| soldier_radiant.png | 天辉小兵 | 未放，使用原创图标 |
-| soldier_dire.png | 夜魇小兵 | 未放，使用原创图标 |
+| soldier_radiant.png | 天辉小兵 | 像素风近战小兵（96×96） |
+| soldier_dire.png | 夜魇小兵 | 像素风近战小兵（96×96） |
+
+小兵头像由 `资源/creeps/radiant_melee.png`、`dire_melee.png` 缩小到 96×96 得到。
 
 当前的英雄头像复制自 `资源/dota2-minimap-hero-sprites/heroes/`（宙斯的原文件名是 `zuus.png`），版权归 Valve 所有，见该目录 README。
 

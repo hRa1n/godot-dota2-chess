@@ -65,7 +65,9 @@ func setup(p_type: String, p_team: int, p_color: Color, p_label: String, p_cell_
 	var path := PORTRAIT_DIR + file + ".png"
 	if ResourceLoader.exists(path):
 		_icon = load(path)
-		texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
+		# 32px 的小地图头像用最近邻放大保持像素感；大图（小兵 96px）用平滑缩小
+		if _icon.get_width() <= 48:
+			texture_filter = CanvasItem.TEXTURE_FILTER_NEAREST
 
 
 func cooldown_of(card_id: String) -> int:
