@@ -1,6 +1,6 @@
 class_name Hud
 extends CanvasLayer
-## 界面层：回合信息、棋子信息、卡牌栏、结束回合按钮、战斗日志、胜利面板。
+## 界面层：左列 = 回合 / 提示 / 棋子信息 / 行动卡；右列 = 装备手牌 / 战斗日志 / 结束回合；中间是棋盘。
 ## 全部用代码搭建，只负责显示和发信号，不含规则。
 
 signal card_pressed(card_id: String)
@@ -19,8 +19,12 @@ var cards_flow: HFlowContainer
 var hand_root: Control
 var hand_label: Label
 var _hand_cards: Array = []
-const HAND_CARD_SIZE := Vector2(150, 231)
-const ACTION_CARD_SIZE := Vector2(166, 256)     # 行动卡多于 1 张时两列排
+## 两侧栏宽度；卡牌两列排
+const SIDE_W := 318.0
+const CARD_GAP := 10.0
+const CARD_SIZE := Vector2(154, 237)
+const LOG_H := 170.0
+const END_H := 56.0
 var end_btn: Button
 var win_panel: PanelContainer
 var win_label: Label
@@ -33,93 +37,97 @@ func _ready() -> void:
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(root)
 
-	# 左上：回合 + 提示
+	# ================= 左列：回合、提示、棋子信息、行动卡 =================
+	var left := VBoxContainer.new()
+	left.position = Vector2(12, 8)
+	left.custom_minimum_size = Vector2(SIDE_W, 0)
+	left.add_theme_constant_override("separation", 8)
+	left.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(left)
 	turn_label = _label(24)
-	turn_label.position = Vector2(16, 8)
-	root.add_child(turn_label)
-	hint_label = _label(15)
-	hint_label.position = Vector2(16, 44)
+	left.add_child(turn_label)
+	hint_label = _label(14)
 	hint_label.add_theme_color_override("font_color", Color("#fde68a"))
-	root.add_child(hint_label)
+	hint_label.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
+	hint_label.custom_minimum_size = Vector2(SIDE_W, 0)
+	left.add_child(hint_label)
+	var info_panel := _panel()
+	left.add_child(info_panel)
+	info_label = _label(14)
+	info_label.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
+	info_label.custom_minimum_size = Vector2(SIDE_W - 24, 0)
+	info_panel.add_child(info_label)
+	var action_title := _label(14)
+	action_title.text = "行动卡"
+	action_title.add_theme_color_override("font_color", Color("#fcd34d"))
+	left.add_child(action_title)
+	cards_flow = HFlowContainer.new()
+	cards_flow.custom_minimum_size = Vector2(SIDE_W, 0)
+	cards_flow.add_theme_constant_override("h_separation", CARD_GAP)
+	cards_flow.add_theme_constant_override("v_separation", CARD_GAP)
+	cards_flow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	left.add_child(cards_flow)
 
 	# 顶部居中：能量圈状态
 	capture_label = _label(16)
 	capture_label.anchor_left = 0.5
 	capture_label.anchor_right = 0.5
-	capture_label.offset_left = -260
-	capture_label.offset_right = 260
-	capture_label.offset_top = 14
+	capture_label.offset_left = -300
+	capture_label.offset_right = 300
+	capture_label.offset_top = 12
 	capture_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	root.add_child(capture_label)
 
-	# 左侧一列：棋子信息 + 卡牌
-	var left := VBoxContainer.new()
-	left.position = Vector2(14, 84)
-	left.custom_minimum_size = Vector2(356, 0)
-	left.add_theme_constant_override("separation", 14)
-	left.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root.add_child(left)
-	var info_panel := _panel()
-	left.add_child(info_panel)
-	info_label = _label(15)
-	info_label.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
-	info_label.custom_minimum_size = Vector2(330, 0)
-	info_panel.add_child(info_label)
-	cards_flow = HFlowContainer.new()
-	cards_flow.custom_minimum_size = Vector2(356, 0)
-	cards_flow.add_theme_constant_override("h_separation", 12)
-	cards_flow.add_theme_constant_override("v_separation", 10)
-	cards_flow.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	left.add_child(cards_flow)
+	# ================= 右列：装备手牌、战斗日志、结束回合 =================
+	hand_label = _label(14)
+	hand_label.add_theme_color_override("font_color", Color("#86efac"))
+	hand_label.anchor_left = 1.0
+	hand_label.anchor_right = 1.0
+	hand_label.offset_left = -SIDE_W - 12
+	hand_label.offset_right = -12
+	hand_label.offset_top = 12
+	root.add_child(hand_label)
+	hand_root = Control.new()
+	hand_root.anchor_left = 1.0
+	hand_root.anchor_right = 1.0
+	hand_root.anchor_bottom = 1.0
+	hand_root.offset_left = -SIDE_W - 12
+	hand_root.offset_right = -12
+	hand_root.offset_top = 40
+	hand_root.offset_bottom = -LOG_H - END_H - 24
+	hand_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hand_root.resized.connect(_layout_hand)
+	root.add_child(hand_root)
 
-	# 右侧：战斗日志
 	var log_panel := _panel()
 	log_panel.anchor_left = 1.0
 	log_panel.anchor_right = 1.0
-	log_panel.offset_left = -312
+	log_panel.anchor_top = 1.0
+	log_panel.anchor_bottom = 1.0
+	log_panel.offset_left = -SIDE_W - 12
 	log_panel.offset_right = -12
-	log_panel.offset_top = 12
-	log_panel.offset_bottom = 420
+	log_panel.offset_top = -LOG_H - END_H - 16
+	log_panel.offset_bottom = -END_H - 16
 	root.add_child(log_panel)
 	log_label = RichTextLabel.new()
 	log_label.bbcode_enabled = true
 	log_label.scroll_following = true
 	log_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	log_label.add_theme_font_size_override("normal_font_size", 13)
-	log_label.add_theme_font_size_override("bold_font_size", 13)
+	log_label.add_theme_font_size_override("normal_font_size", 12)
+	log_label.add_theme_font_size_override("bold_font_size", 12)
 	log_panel.add_child(log_label)
 
-	# 底部：手牌栏（位于左侧卡牌栏右边、结束回合按钮左边）
-	hand_label = _label(15)
-	hand_label.anchor_top = 1.0
-	hand_label.anchor_bottom = 1.0
-	hand_label.offset_left = 390
-	hand_label.offset_top = -270
-	root.add_child(hand_label)
-	hand_root = Control.new()
-	hand_root.anchor_top = 1.0
-	hand_root.anchor_bottom = 1.0
-	hand_root.anchor_right = 1.0
-	hand_root.offset_left = 384
-	hand_root.offset_right = -170
-	hand_root.offset_top = -244
-	hand_root.offset_bottom = -6
-	hand_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	hand_root.resized.connect(_layout_hand)
-	root.add_child(hand_root)
-
-	# 右下：结束回合
 	end_btn = Button.new()
-	end_btn.text = "结束回合"
+	end_btn.text = "结束回合（空格）"
 	end_btn.focus_mode = Control.FOCUS_NONE
 	end_btn.anchor_left = 1.0
 	end_btn.anchor_right = 1.0
 	end_btn.anchor_top = 1.0
 	end_btn.anchor_bottom = 1.0
-	end_btn.offset_left = -156
-	end_btn.offset_right = -14
-	end_btn.offset_top = -96
-	end_btn.offset_bottom = -36
+	end_btn.offset_left = -SIDE_W - 12
+	end_btn.offset_right = -12
+	end_btn.offset_top = -END_H - 8
+	end_btn.offset_bottom = -8
 	end_btn.add_theme_font_size_override("font_size", 20)
 	_style_button(end_btn, Color("#047857"))
 	end_btn.pressed.connect(end_turn_pressed.emit)
@@ -183,12 +191,12 @@ func set_cards(cards: Array) -> void:
 		c.queue_free()
 	for c in cards:
 		var v := CardView.new()
-		v.setup(c, CardView.CARD_SIZE if cards.size() <= 1 else ACTION_CARD_SIZE)
+		v.setup(c, CARD_SIZE)
 		v.clicked.connect(func(info): card_pressed.emit(info["id"]))
 		cards_flow.add_child(v)
 
 
-## 手牌：横向排开，放不下时叠在一起；悬停的那张会上浮
+## 装备手牌：两列排，放不下时上下叠起来；悬停的那张会上浮并放到最前面
 func set_hand(cards: Array, header: String) -> void:
 	hand_label.text = header
 	for c in hand_root.get_children():
@@ -197,7 +205,7 @@ func set_hand(cards: Array, header: String) -> void:
 	_hand_cards.clear()
 	for c in cards:
 		var v := CardView.new()
-		v.setup(c, HAND_CARD_SIZE)
+		v.setup(c, CARD_SIZE)
 		v.raise_on_hover = true
 		v.clicked.connect(func(info): hand_card_pressed.emit(info["uid"]))
 		hand_root.add_child(v)
@@ -209,17 +217,16 @@ func _layout_hand() -> void:
 	var n := _hand_cards.size()
 	if n == 0:
 		return
-	var w := HAND_CARD_SIZE.x
-	var avail := hand_root.size.x
-	var step := w + 10
-	if n > 1 and step * (n - 1) + w > avail:
-		step = maxf(24.0, (avail - w) / (n - 1))
-	var total := step * (n - 1) + w
-	var x0 := maxf(0.0, (avail - total) * 0.5)
+	var rows := int(ceil(n / 2.0))
+	var h := CARD_SIZE.y
+	var avail := hand_root.size.y
+	var step := h + CARD_GAP
+	if rows > 1 and step * (rows - 1) + h > avail:
+		step = maxf(40.0, (avail - h) / (rows - 1))
 	for i in n:
 		var v: CardView = _hand_cards[i]
-		v.base_y = 0.0
-		v.position = Vector2(x0 + step * i, 0.0)
+		v.base_y = (i / 2) * step
+		v.position = Vector2((i % 2) * (CARD_SIZE.x + CARD_GAP), v.base_y)
 
 
 func show_winner(text: String, color: Color) -> void:

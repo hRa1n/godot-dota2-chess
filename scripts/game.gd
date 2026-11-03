@@ -115,11 +115,17 @@ func _ready() -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
-		if pending_card != "":
-			_cancel_targeting()
-		else:
-			_select(null)
+	if not (event is InputEventKey and event.pressed and not event.echo):
+		return
+	match event.keycode:
+		KEY_ESCAPE:
+			if pending_card != "":
+				_cancel_targeting()
+			else:
+				_select(null)
+		KEY_SPACE:      # 空格：结束回合
+			get_viewport().set_input_as_handled()
+			end_turn()
 
 
 # ================= 布置 =================
@@ -937,11 +943,11 @@ func _refresh_view() -> void:
 			big.append(_card_info(id, -1))
 	hud.set_cards(big)
 
-	# 底部：本方手牌
+	# 右侧：本方装备手牌
 	var hand := []
 	for e in hands[current_team]:
 		hand.append(_card_info(e["id"], e["uid"]))
-	hud.set_hand(hand, "%s手牌 %d/%d · 牌库 %d · 弃牌 %d" % [
+	hud.set_hand(hand, "%s装备手牌 %d/%d · 牌库 %d · 弃牌 %d" % [
 		TEAM_NAME[current_team], hands[current_team].size(), HAND_LIMIT,
 		decks[current_team].size(), discards[current_team].size()])
 
@@ -1023,7 +1029,7 @@ func _hint_text() -> String:
 	if not has_moved:
 		parts.append("点绿色格子移动")
 	if not has_used_card:
-		parts.append("用一张行动卡（左侧）或装备（下方）")
+		parts.append("用一张行动卡（左侧）或装备（右侧）")
 	return "，".join(parts) if parts.size() > 0 else "行动完成"
 
 

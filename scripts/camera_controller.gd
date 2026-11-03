@@ -8,10 +8,10 @@ extends Camera2D
 @export var zoom_step := 1.12
 @export var key_pan_speed := 900.0
 ## 屏幕四周留给界面的像素：左侧卡牌栏、右侧日志、上方回合信息
-@export var hud_left := 384.0
-@export var hud_right := 330.0
-@export var hud_top := 80.0
-@export var hud_bottom := 278.0
+@export var hud_left := 340.0
+@export var hud_right := 340.0
+@export var hud_top := 40.0
+@export var hud_bottom := 12.0
 
 var _board: Board
 var _dragging := false
