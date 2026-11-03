@@ -66,6 +66,7 @@
 - `assets/portraits/`：头像替换目录，放入同名 PNG 即可覆盖默认图标，说明见该目录的 README
 - [`资源/dota2-minimap-hero-sprites/`](资源/dota2-minimap-hero-sprites/)：Dota 2 小地图英雄像素头像（32×32，127 个英雄 + 50 张变体，Valve 素材），来源、内部代号对照和用法见[该目录的 README](资源/dota2-minimap-hero-sprites/README.md)
 - [`资源/fountain/`](资源/fountain/)：像素风泉水图原图（天辉 / 夜魇各一张，1254×1254），游戏里用的是缩小到 192×192 的 `assets/fountain/`，说明见[该目录的 README](资源/fountain/README.md)
+- [`资源/creeps/`](资源/creeps/)：像素风小兵头像（天辉 / 夜魇 × 近战 / 远程 / 攻城，透明背景 258×258），说明见[该目录的 README](资源/creeps/README.md)
 - `资源/` 目录只存原始素材，不打进网页导出包；游戏实际使用的图片都放在 `assets/` 下
 
 ## 版权说明
@@ -105,6 +106,7 @@ tests/test_rules.gd           规则自动测试
 assets/fonts/                 思源黑体（Noto Sans SC）常用字子集，SIL OFL 1.1 授权
 资源/dota2-minimap-hero-sprites/  Dota 2 小地图英雄像素头像（32×32），索引见 heroes.csv
 资源/fountain/                像素风泉水图（天辉 fountain_radiant.png / 夜魇 fountain_dire.png）
+资源/creeps/                  像素风小兵头像（radiant_/dire_ + melee/ranged/siege）
 export_presets.cfg            网页导出配置（单线程，无需特殊响应头）
 .github/workflows/deploy-web.yml  推送后自动导出并发布到 GitHub Pages
 ```
