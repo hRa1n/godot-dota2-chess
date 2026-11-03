@@ -3,10 +3,14 @@ extends Node2D
 ##
 ## 回合规则：
 ##   - 每方回合开始：泉水结算 → 能量圈结算 → 从本方牌库抽 2 张资源卡
-##   - 每回合只能操作【一个】己方棋子：移动一次（可选）+ 出一张牌（可选），顺序不限
-##     可出的牌 = 该棋子的基础攻击卡，或手牌里它能用的资源卡（本英雄专属技能 / 任意装备）
-##   - 一旦移动或出牌，本回合就锁定为这个棋子；两样都用完后自动结束回合
-## 牌库：本方每个英雄的 3 张技能卡各 2 张 + 每种装备各 2 张；抽空后把弃牌洗回牌库；手牌上限 8
+##       抽到技能卡：对应英雄永久解锁这个技能（加入它的行动卡，不进手牌）
+##       抽到装备卡：进手牌（上限 8）
+##   - 每回合只能操作【一个】己方棋子：移动一次（可选）+ 一个行动（可选），顺序不限
+##       行动 = 用该棋子的一张行动卡（基础攻击 / 已解锁的技能，技能有冷却），或从手牌给它用一张装备
+##   - 一旦移动或行动，本回合就锁定为这个棋子；两样都用完后自动结束回合
+## 牌库：本方 3 个英雄的技能卡各 1 张 + 每种装备各 2 张；抽空后把弃牌洗回牌库
+## 装备：只有英雄能装，每个英雄最多 6 件，装上后不能卸下（治疗药膏是消耗品，任何棋子都能用）
+## 复活：英雄阵亡后，过 2 个己方回合，在己方泉水周围复活（从泉水正上方开始顺时针找空格）
 ## 阵营：天辉在下，夜魇在上
 ## 泉水：每方回合开始时，己方泉水周围 5x5 内的己方棋子 +2 血，并随机打范围内一个敌人 5 血
 ## 能量圈：地图正中。棋子站上去后，连续 2 个己方回合开始时仍站在上面 → 获胜
@@ -30,6 +34,8 @@ const CAPTURE_TURNS := 2
 ## 抽牌
 const DRAW_PER_TURN := 2
 const HAND_LIMIT := 8
+const MAX_EQUIP := 6
+const RESPAWN_TURNS := 2
 
 ## 开局布置：[天辉, 夜魇]，坐标为内部 Vector2i(列, 行)
 const LAYOUTS := [
@@ -154,6 +160,26 @@ func _build_decks() -> void:
 		hands[team] = []
 
 
+## 抽到技能卡：给本方对应英雄解锁；英雄已阵亡则进弃牌堆
+func _unlock_skill(team: int, card_id: String) -> String:
+	var card: Dictionary = PieceDefs.CARDS[card_id]
+	var hero_name: String = PieceDefs.PIECES[card["owner"]]["name"]
+	for p in pieces:
+		if p.team == team and p.type_id == card["owner"] and (p.alive or p.respawn_in > 0):
+			if not p.cards.has(card_id):
+				p.cards.append(card_id)
+				_float(p.position, "解锁 " + card["name"], Color("#93c5fd"))
+				return "%s解锁【%s】" % [hero_name, card["name"]]
+	discards[team].append(card_id)
+	return "【%s】（已解锁过，弃掉）" % card["name"]
+
+
+## 直接给英雄解锁技能（测试 / 调试用）
+func unlock(p: Piece, card_id: String) -> void:
+	if not p.cards.has(card_id):
+		p.cards.append(card_id)
+
+
 ## 直接往手牌里加一张（测试 / 调试用）
 func give_card(team: int, card_id: String) -> int:
 	_uid += 1
@@ -180,7 +206,11 @@ func _draw_cards(team: int, n: int) -> void:
 			decks[team].shuffle()
 			_log("%s 弃牌堆洗回牌库" % TEAM_NAME[team])
 		var id: String = decks[team].pop_back()
-		var card_name: String = PieceDefs.CARDS[id]["name"]
+		var card: Dictionary = PieceDefs.CARDS[id]
+		var card_name: String = card["name"]
+		if card["kind"] == "skill":
+			got.append(_unlock_skill(team, id))
+			continue
 		if hands[team].size() >= HAND_LIMIT:
 			discards[team].append(id)
 			_log("手牌已满，【%s】被弃掉" % card_name)
@@ -188,7 +218,7 @@ func _draw_cards(team: int, n: int) -> void:
 			give_card(team, id)
 			got.append("【%s】" % card_name)
 	if not got.is_empty():
-		_log("%s 抽到 %s（手牌 %d/%d）" % [TEAM_NAME[team], "".join(got), hands[team].size(), HAND_LIMIT])
+		_log("%s 抽牌：%s（手牌 %d/%d）" % [TEAM_NAME[team], "、".join(got), hands[team].size(), HAND_LIMIT])
 
 
 # ================= 查询 =================
@@ -262,11 +292,11 @@ func piece_can_use(p: Piece, card_id: String) -> bool:
 	if p == null:
 		return false
 	var card: Dictionary = PieceDefs.CARDS[card_id]
-	if card.has("owner"):
-		return card["owner"] == p.type_id
-	if card["kind"] == "attack":
-		return p.cards.has(card_id)
-	return true     # 装备：任何棋子都能用
+	if card["kind"] == "equip":
+		if card.get("consumable", false):
+			return true     # 消耗品：任何棋子都能用
+		return p.is_hero and p.equipment.size() < MAX_EQUIP
+	return p.cards.has(card_id)     # 基础攻击 / 已解锁的技能
 
 
 func card_usable(p: Piece, card_id: String) -> bool:
@@ -284,6 +314,7 @@ func _start_turn() -> void:
 	_log("[b]—— 第 %d 回合 · [color=%s]%s[/color] ——[/b]" % [
 		round_no, TEAM_COLOR[current_team].to_html(false), TEAM_NAME[current_team]])
 	_switch_background(current_team)
+	_respawn_tick(current_team)
 	_fountain_tick(current_team)
 	if _check_win():
 		return
@@ -348,6 +379,51 @@ func _switch_background(team: int) -> void:
 	_bg_tween = create_tween().set_parallel()
 	for i in backgrounds.size():
 		_bg_tween.tween_property(backgrounds[i], "modulate:a", 1.0 if i == team else 0.0, 0.6)
+
+
+# ================= 复活 =================
+
+func _respawn_tick(team: int) -> void:
+	for p in pieces:
+		if p.alive or p.team != team or p.respawn_in <= 0:
+			continue
+		p.respawn_in -= 1
+		if p.respawn_in > 0:
+			_log("%s %d 回合后复活" % [p.label_name, p.respawn_in])
+			continue
+		var c := respawn_cell(team)
+		if c == Board.NO_CELL:
+			p.respawn_in = 1
+			_log("%s 泉水周围没有空位，下回合再复活" % p.label_name)
+			continue
+		p.revive(c, board.cell_center(c))
+		_log("[color=#93c5fd]%s 在 %s 复活[/color]" % [p.label_name, fmt(c)])
+
+
+## 泉水周围的复活点：从正上方开始顺时针，先找第一圈，满了再往外一圈
+func respawn_cell(team: int) -> Vector2i:
+	var f: Vector2i = FOUNTAIN_CELLS[team]
+	for r in range(1, 4):
+		for off in _clockwise_ring(r):
+			var c: Vector2i = f + off
+			if not is_blocked(c):
+				return c
+	return Board.NO_CELL
+
+
+static func _clockwise_ring(r: int) -> Array[Vector2i]:
+	var out: Array[Vector2i] = []
+	for x in range(0, r + 1):              # 上边：正上方 → 右上角
+		out.append(Vector2i(x, -r))
+	for y in range(-r + 1, r + 1):         # 右边：往下
+		out.append(Vector2i(r, y))
+	for x in range(r - 1, -r - 1, -1):     # 下边：往左
+		out.append(Vector2i(x, r))
+	for y in range(r - 1, -r - 1, -1):     # 左边：往上
+		out.append(Vector2i(-r, y))
+	for x in range(-r + 1, 0):             # 上边：左上角 → 正上方
+		out.append(Vector2i(x, -r))
+	return out
 
 
 # ================= 泉水 =================
@@ -468,9 +544,6 @@ func _begin_card(card_id: String, hand_uid: int) -> void:
 		_log("先点一个己方棋子，再出牌")
 		return
 	if not card_usable(selected, card_id):
-		var card0: Dictionary = PieceDefs.CARDS[card_id]
-		if card0.has("owner") and card0["owner"] != selected.type_id:
-			_log("【%s】只有%s能用" % [card0["name"], PieceDefs.PIECES[card0["owner"]]["name"]])
 		return
 	if pending_card == card_id and pending_hand_uid == hand_uid:
 		_cancel_targeting()
@@ -580,7 +653,8 @@ func _resolve_card(p: Piece, card_id: String, target_cell: Vector2i, hand_uid :=
 			hands[p.team].erase(entry)
 			discards[p.team].append(card_id)
 	if card.get("cooldown", 0) > 0:
-		p.cooldowns[card_id] = card["cooldown"]
+		# 己方回合结束时 -1；+1 是为了让“冷却 N”= 接下来 N 个己方回合不能用
+		p.cooldowns[card_id] = card["cooldown"] + 1
 	var target := piece_at(target_cell)
 	var physical: bool = card.get("damage_type", "magic") == "physical"
 	_log("%s 使用【%s】" % [p.label_name, card["name"]])
@@ -790,6 +864,9 @@ func _damage(target: Piece, amount: int, physical := false) -> void:
 	if target.hp == 0:
 		target.die()
 		_log("  [color=#f87171]%s 阵亡[/color]" % target.label_name)
+		if target.is_hero:
+			target.respawn_in = RESPAWN_TURNS
+			_log("  %s 将在 %d 个己方回合后于泉水复活" % [target.label_name, RESPAWN_TURNS])
 		if target == capture_piece:
 			capture_piece = null
 			capture_count = 0
@@ -819,7 +896,7 @@ func _check_win() -> bool:
 		return true
 	var alive := [0, 0]
 	for p in pieces:
-		if p.alive:
+		if p.alive or p.respawn_in > 0:     # 等待复活的英雄也算
 			alive[p.team] += 1
 	for team in [Team.BLUE, Team.RED]:
 		if alive[team] == 0:
@@ -853,7 +930,7 @@ func _refresh_view() -> void:
 	hud.set_hint(_hint_text())
 	hud.set_info(_info_text(selected))
 
-	# 左侧：选中棋子的基础攻击卡
+	# 左侧：选中棋子的行动卡（基础攻击 + 已解锁技能）
 	var big := []
 	if selected and selected.alive:
 		for id in selected.cards:
@@ -873,16 +950,21 @@ func _card_info(id: String, uid: int) -> Dictionary:
 	var card: Dictionary = PieceDefs.CARDS[id]
 	var p := selected
 	var status := "可用"
+	var cd := p.cooldown_of(id) if p else 0
 	if p == null or not p.alive:
 		status = "先选棋子"
-	elif card.has("owner") and card["owner"] != p.type_id:
-		status = "%s专属" % PieceDefs.PIECES[card["owner"]]["name"]
 	elif p.team != current_team:
 		status = "敌方棋子"
 	elif p.stun > 0:
 		status = "眩晕中"
+	elif card["kind"] == "equip" and not card.get("consumable", false) and not p.is_hero:
+		status = "只有英雄能装备"
+	elif card["kind"] == "equip" and not card.get("consumable", false) and p.equipment.size() >= MAX_EQUIP:
+		status = "装备已满 %d/%d" % [MAX_EQUIP, MAX_EQUIP]
 	elif has_used_card:
-		status = "本回合已出牌"
+		status = "本回合已行动"
+	elif cd > 0:
+		status = "冷却中 剩%d回合" % cd
 	elif not can_control(p):
 		status = "本回合不可用"
 
@@ -916,6 +998,7 @@ func _card_info(id: String, uid: int) -> Dictionary:
 		"id": id, "uid": uid, "name": card["name"], "kind": card["kind"],
 		"type_line": type_line, "card_text": card.get("card_text", ""), "desc": card["desc"],
 		"art": card.get("art", "sword"), "damage": dmg, "range_text": rng,
+		"cooldown": card.get("cooldown", 0),
 		"status": status, "enabled": p != null and card_usable(p, id),
 		"selecting": pending_card == id and pending_hand_uid == uid,
 	}
@@ -940,19 +1023,21 @@ func _hint_text() -> String:
 	if not has_moved:
 		parts.append("点绿色格子移动")
 	if not has_used_card:
-		parts.append("出一张牌（左侧攻击卡或下方手牌）")
+		parts.append("用一张行动卡（左侧）或装备（下方）")
 	return "，".join(parts) if parts.size() > 0 else "行动完成"
 
 
 func _info_text(p: Piece) -> String:
 	if p == null or not p.alive:
-		return ("未选择棋子\n\n坐标格式：行-列\n泉水：天辉 %s（下），夜魇 %s（上）。每个己方回合开始，周围 5x5 内己方棋子 +%d 血，并随机攻击范围内一个敌人 %d 血。\n\n每回合开始抽 %d 张资源卡（英雄技能 / 装备）。\n\n胜利：站上中央能量圈 %s，连续 %d 个己方回合开始时仍在上面；或消灭对方全部棋子。") % [
+		return ("未选择棋子\n\n坐标格式：行-列\n泉水：天辉 %s（下），夜魇 %s（上）。每个己方回合开始，周围 5x5 内己方棋子 +%d 血，并随机攻击范围内一个敌人 %d 血。\n\n每回合开始抽 %d 张资源卡：技能卡直接解锁给对应英雄（变成它的行动卡），装备卡进手牌。英雄最多 6 件装备，装上不能卸。英雄阵亡 2 个己方回合后在泉水旁复活。\n\n胜利：站上中央能量圈 %s，连续 %d 个己方回合开始时仍在上面；或消灭对方全部棋子。") % [
 			fmt(FOUNTAIN_CELLS[0]), fmt(FOUNTAIN_CELLS[1]), FOUNTAIN_HEAL, FOUNTAIN_DAMAGE, DRAW_PER_TURN, fmt(ENERGY_CELL), CAPTURE_TURNS]
 	var role := "英雄" if p.is_hero else ("召唤物" if p.type_id == "illusion" else "士兵")
 	var state := "正常" if p.stun == 0 else "眩晕（剩 %d 回合）" % p.stun
-	var eq := "无" if p.equipment.is_empty() else "、".join(p.equipment)
-	return "%s（%s）\n血量 %d / %d    防御 %d\n移动速度 %d    攻击加成 +%d\n装备：%s\n状态：%s    位置：%s" % [
-		p.label_name, role, p.hp, p.max_hp, p.defense, p.move, p.atk_bonus, eq, state, fmt(p.cell)]
+	var eq := "（只有英雄能装备）"
+	if p.is_hero:
+		eq = "%d/%d  %s" % [p.equipment.size(), MAX_EQUIP, "无" if p.equipment.is_empty() else "、".join(p.equipment)]
+	return "%s（%s）  %s\n血量 %d / %d    防御 %d\n移动速度 %d    攻击加成 +%d\n装备：%s\n状态：%s" % [
+		p.label_name, role, fmt(p.cell), p.hp, p.max_hp, p.defense, p.move, p.atk_bonus, eq, state]
 
 
 func _log(text: String) -> void:

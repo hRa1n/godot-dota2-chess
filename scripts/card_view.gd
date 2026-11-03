@@ -1,7 +1,7 @@
 class_name CardView
 extends Control
 ## 一张卡牌（炉石风格）：金色边框、卡面插画、名字横幅、描述框、三颗宝石。
-##   左下橙宝石 = 伤害   右下青宝石 = 范围（没有就不画）
+##   左上蓝宝石 = 冷却回合数   左下橙宝石 = 伤害   右下青宝石 = 范围（没有就不画）
 ##   卡身颜色：攻击卡棕、技能卡蓝、装备卡绿
 ## 只负责显示和点击，规则在 game.gd。
 
@@ -100,6 +100,8 @@ func _draw() -> void:
 		HORIZONTAL_ALIGNMENT_CENTER, box.size.x - 10 * k, fs, lines, Color("#3b2a14"))
 
 	# 宝石
+	if info.get("cooldown", 0) > 0:
+		_gem(Vector2(18, 18) * k, 14 * k, Color("#2563eb"), str(info["cooldown"]), int(15 * k))
 	var dmg: String = info["damage"]
 	if dmg != "":
 		_gem(Vector2(20 * k, h - 18 * k), 17 * k, Color("#d97706"), dmg, int((17 if dmg.length() <= 2 else 11) * k))

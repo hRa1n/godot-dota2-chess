@@ -30,6 +30,7 @@ var move := 1
 var cards: Array = []
 var cooldowns := {}         # 卡牌 id -> 剩余冷却（己方回合数）
 var stun := 0               # 剩余眩晕（己方回合数）
+var respawn_in := 0         # 英雄阵亡后，还要几个己方回合复活（0 = 不在复活中）
 var alive := true
 var is_hero := false
 var highlight := false      # 本回合正在行动
@@ -52,7 +53,7 @@ func setup(p_type: String, p_team: int, p_color: Color, p_label: String, p_cell_
 	hp = max_hp
 	defense = def["defense"]
 	move = def["move"]
-	cards = def["cards"]
+	cards = def["cards"].duplicate()     # 行动卡：基础攻击 + 已解锁的技能
 	is_hero = def["hero"]
 	z_index = 1
 	var icon_path = ICONS[type_id]
@@ -82,6 +83,20 @@ func end_own_turn() -> void:
 func flash() -> void:
 	modulate = Color(2.2, 2.2, 2.2)
 	create_tween().tween_property(self, "modulate", Color.WHITE, 0.3)
+
+
+## 复活：满血、清眩晕，装备和已解锁技能保留
+func revive(p_cell: Vector2i, pos: Vector2) -> void:
+	alive = true
+	respawn_in = 0
+	hp = max_hp
+	stun = 0
+	cell = p_cell
+	position = pos
+	show()
+	modulate = Color(1, 1, 1, 0)
+	create_tween().tween_property(self, "modulate:a", 1.0, 0.4)
+	queue_redraw()
 
 
 func die() -> void:

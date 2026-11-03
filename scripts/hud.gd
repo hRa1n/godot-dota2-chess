@@ -20,6 +20,7 @@ var hand_root: Control
 var hand_label: Label
 var _hand_cards: Array = []
 const HAND_CARD_SIZE := Vector2(150, 231)
+const ACTION_CARD_SIZE := Vector2(166, 256)     # 行动卡多于 1 张时两列排
 var end_btn: Button
 var win_panel: PanelContainer
 var win_label: Label
@@ -66,8 +67,8 @@ func _ready() -> void:
 	info_panel.add_child(info_label)
 	cards_flow = HFlowContainer.new()
 	cards_flow.custom_minimum_size = Vector2(356, 0)
-	cards_flow.add_theme_constant_override("h_separation", 14)
-	cards_flow.add_theme_constant_override("v_separation", 14)
+	cards_flow.add_theme_constant_override("h_separation", 12)
+	cards_flow.add_theme_constant_override("v_separation", 10)
 	cards_flow.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	left.add_child(cards_flow)
 
@@ -182,7 +183,7 @@ func set_cards(cards: Array) -> void:
 		c.queue_free()
 	for c in cards:
 		var v := CardView.new()
-		v.setup(c)
+		v.setup(c, CardView.CARD_SIZE if cards.size() <= 1 else ACTION_CARD_SIZE)
 		v.clicked.connect(func(info): card_pressed.emit(info["id"]))
 		cards_flow.add_child(v)
 
