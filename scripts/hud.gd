@@ -14,6 +14,7 @@ const MAX_LOG := 60
 var turn_label: Label
 var hint_label: Label
 var info_label: Label
+var capture_label: Label
 var log_label: RichTextLabel
 var card_bar: HBoxContainer
 var end_btn: Button
@@ -36,6 +37,16 @@ func _ready() -> void:
 	hint_label.position = Vector2(16, 44)
 	hint_label.add_theme_color_override("font_color", Color("#fde68a"))
 	root.add_child(hint_label)
+
+	# 顶部居中：能量圈状态
+	capture_label = _label(16)
+	capture_label.anchor_left = 0.5
+	capture_label.anchor_right = 0.5
+	capture_label.offset_left = -260
+	capture_label.offset_right = 260
+	capture_label.offset_top = 14
+	capture_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	root.add_child(capture_label)
 
 	# 左侧：棋子信息
 	var info_panel := _panel()
@@ -124,6 +135,11 @@ func _ready() -> void:
 func set_turn(round_no: int, team_name: String, team_color: Color) -> void:
 	turn_label.text = "第 %d 回合 · %s行动" % [round_no, team_name]
 	turn_label.add_theme_color_override("font_color", team_color.lightened(0.35))
+
+
+func set_capture(text: String, color: Color) -> void:
+	capture_label.text = text
+	capture_label.add_theme_color_override("font_color", color.lightened(0.4))
 
 
 func set_hint(text: String) -> void:

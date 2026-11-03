@@ -6,8 +6,10 @@ extends Node2D
 ##   - 这个棋子本回合可以：移动一次（可选）+ 使用一张自己的卡牌（可选），顺序不限
 ##   - 一旦移动或出牌，本回合就锁定为这个棋子
 ##   - 移动和出牌都用完后自动结束回合，也可以随时点「结束回合」
-## 泉水：每方回合开始时，己方泉水范围内的己方棋子回血，敌方棋子受到伤害
-## 胜负：消灭对方全部英雄获胜
+## 泉水：每方回合开始时，己方泉水周围 5x5 内的己方棋子 +2 血，并随机打范围内一个敌人 5 血
+## 能量圈：地图正中。棋子站上去后，连续 2 个己方回合开始时仍站在上面 → 获胜
+## 另外：对方棋子全部阵亡也直接获胜
+## 坐标：内部从 0 开始；界面和日志显示从 1 开始（1~21）
 
 const FloatText := preload("res://scripts/float_text.gd")
 
@@ -15,19 +17,23 @@ enum Team { BLUE, RED }
 const TEAM_NAME := ["蓝方", "红方"]
 const TEAM_SHORT := ["蓝", "红"]
 const TEAM_COLOR := [Color("#2563eb"), Color("#dc2626")]
-const FOUNTAIN_CELLS := [Vector2i(0, 20), Vector2i(20, 0)]
-const FOUNTAIN_RADIUS := 2      # 切比雪夫距离：泉水周围 5x5（贴角时 3x3）
-const FOUNTAIN_HEAL := 10
-const FOUNTAIN_DAMAGE := 20
+## 泉水位置（显示坐标 1-11 和 21-11）
+const FOUNTAIN_CELLS := [Vector2i(0, 10), Vector2i(20, 10)]
+const FOUNTAIN_RADIUS := 2      # 周围 5x5（贴边时只有棋盘内的部分）
+const FOUNTAIN_HEAL := 2
+const FOUNTAIN_DAMAGE := 5
+## 能量圈（显示坐标 11-11）
+const ENERGY_CELL := Vector2i(10, 10)
+const CAPTURE_TURNS := 2
 
-## 蓝方开局布置（红方按棋盘中心对称）
+## 蓝方开局布置（红方左右镜像）
 const LAYOUT := [
-	["zeus", Vector2i(2, 18)],
-	["chaos_knight", Vector2i(4, 16)],
-	["soldier", Vector2i(6, 18)],
-	["soldier", Vector2i(2, 14)],
-	["soldier", Vector2i(6, 14)],
-	["soldier", Vector2i(8, 16)],
+	["zeus", Vector2i(1, 9)],
+	["chaos_knight", Vector2i(1, 11)],
+	["soldier", Vector2i(2, 7)],
+	["soldier", Vector2i(2, 13)],
+	["soldier", Vector2i(3, 9)],
+	["soldier", Vector2i(3, 11)],
 ]
 
 const OVERLAY_MOVE := Color(0.13, 0.65, 0.3, 0.38)
@@ -52,6 +58,8 @@ var pending_card := ""          # 正在选目标的卡牌 id
 var move_cells := {}            # 可移动格
 var range_cells := {}           # 射程范围
 var target_cells := {}          # 可选目标格
+var capture_piece: Piece = null # 正在占领能量圈的棋子
+var capture_count := 0
 var game_over := false
 var busy := false               # 播放动画时不接受操作
 
@@ -60,6 +68,7 @@ func _ready() -> void:
 	randomize()
 	board.fountains = {FOUNTAIN_CELLS[0]: TEAM_COLOR[0], FOUNTAIN_CELLS[1]: TEAM_COLOR[1]}
 	board.fountain_radius = FOUNTAIN_RADIUS
+	board.energy_cell = ENERGY_CELL
 	board.cell_clicked.connect(_on_cell_clicked)
 	hud.card_pressed.connect(_on_card_pressed)
 	hud.end_turn_pressed.connect(end_turn)
@@ -85,7 +94,7 @@ func _spawn_all() -> void:
 			var type_id: String = entry[0]
 			var cell: Vector2i = entry[1]
 			if team == Team.RED:
-				cell = Vector2i(Board.COLS - 1 - cell.x, Board.ROWS - 1 - cell.y)
+				cell = Vector2i(Board.COLS - 1 - cell.x, cell.y)
 			var name_cn: String = PieceDefs.PIECES[type_id]["name"]
 			if type_id == "soldier":
 				soldier_no += 1
@@ -109,6 +118,11 @@ func piece_at(cell: Vector2i) -> Piece:
 
 func is_blocked(cell: Vector2i) -> bool:
 	return not board.is_in_bounds(cell) or FOUNTAIN_CELLS.has(cell) or piece_at(cell) != null
+
+
+## 显示用坐标（从 1 开始）
+static func fmt(c: Vector2i) -> String:
+	return "(%d, %d)" % [c.x + 1, c.y + 1]
 
 
 static func manhattan(a: Vector2i, b: Vector2i) -> int:
@@ -167,6 +181,8 @@ func _start_turn() -> void:
 	_fountain_tick(current_team)
 	if _check_win():
 		return
+	if _capture_tick(current_team):
+		return
 	_select(null)
 
 	var can_act := false
@@ -220,16 +236,60 @@ func _after_action() -> void:
 
 func _fountain_tick(team: int) -> void:
 	var f: Vector2i = FOUNTAIN_CELLS[team]
-	for p in pieces.duplicate():
+	var enemies_in_range: Array[Piece] = []
+	for p in pieces:
 		if not p.alive or chebyshev(p.cell, f) > FOUNTAIN_RADIUS:
 			continue
 		if p.team == team:
 			if p.hp < p.max_hp:
 				_heal(p, FOUNTAIN_HEAL)
-				_log("泉水为 %s 回复生命" % p.label_name)
+				_log("泉水为 %s 回复 %d 血" % [p.label_name, FOUNTAIN_HEAL])
 		else:
-			_log("泉水攻击 %s" % p.label_name)
-			_damage(p, FOUNTAIN_DAMAGE)
+			enemies_in_range.append(p)
+	if not enemies_in_range.is_empty():
+		var victim: Piece = enemies_in_range.pick_random()
+		_log("泉水攻击 %s" % victim.label_name)
+		_damage(victim, FOUNTAIN_DAMAGE)
+
+
+# ================= 能量圈 =================
+
+## 己方回合开始时结算占领；返回 true 表示已分出胜负
+func _capture_tick(team: int) -> bool:
+	var p := piece_at(ENERGY_CELL)
+	# 占领者离开或阵亡 → 清零
+	if capture_piece and (not capture_piece.alive or capture_piece != p):
+		capture_piece = null
+		capture_count = 0
+	if p == null or p.team != team:
+		_refresh_capture()
+		return false
+	if capture_piece != p:
+		capture_piece = p
+		capture_count = 0
+	capture_count += 1
+	_log("[color=#c084fc]%s 占领能量圈 %d/%d[/color]" % [p.label_name, capture_count, CAPTURE_TURNS])
+	_refresh_capture()
+	if capture_count >= CAPTURE_TURNS:
+		_declare_win(team, "占领能量圈 %d 回合" % CAPTURE_TURNS)
+		return true
+	return false
+
+
+func _refresh_capture() -> void:
+	var p := piece_at(ENERGY_CELL)
+	if capture_piece and capture_piece == p:
+		board.energy_owner_color = TEAM_COLOR[p.team]
+		board.energy_progress = float(capture_count) / CAPTURE_TURNS
+		hud.set_capture("能量圈：%s 已占领 %d/%d 回合" % [p.label_name, capture_count, CAPTURE_TURNS], TEAM_COLOR[p.team])
+	elif p:
+		board.energy_owner_color = TEAM_COLOR[p.team]
+		board.energy_progress = 0.0
+		hud.set_capture("能量圈：%s 站在上面（下个己方回合开始计 1/%d）" % [p.label_name, CAPTURE_TURNS], TEAM_COLOR[p.team])
+	else:
+		board.energy_progress = 0.0
+		hud.set_capture("能量圈：无人占领（站上去，连续 %d 个己方回合开始时仍在 → 获胜）" % CAPTURE_TURNS, Color("#c084fc"))
+	board.queue_redraw()
 
 
 # ================= 输入 =================
@@ -285,13 +345,16 @@ func _on_card_pressed(card_id: String) -> void:
 	range_cells.clear()
 	target_cells.clear()
 	var rng: int = card["range"]
+	var square: bool = card.get("area", "diamond") == "square"
 	for dy in range(-rng, rng + 1):
 		for dx in range(-rng, rng + 1):
 			var c := selected.cell + Vector2i(dx, dy)
-			if absi(dx) + absi(dy) <= rng and board.is_in_bounds(c) and c != selected.cell:
+			var inside := square or absi(dx) + absi(dy) <= rng
+			if inside and board.is_in_bounds(c) and c != selected.cell:
 				range_cells[c] = true
 	for e in enemies_of(selected):
-		if manhattan(selected.cell, e.cell) > rng:
+		var d := chebyshev(selected.cell, e.cell) if square else manhattan(selected.cell, e.cell)
+		if d > rng:
 			continue
 		if card["effect"] == "rift" and _free_cell_next_to(e, selected) == Board.NO_CELL:
 			continue
@@ -316,7 +379,7 @@ func _move(p: Piece, cell: Vector2i) -> void:
 	_lock_active(p)
 	has_moved = true
 	move_cells.clear()
-	_log("%s 移动到 (%d, %d)" % [p.label_name, cell.x, cell.y])
+	_log("%s 移动到 %s" % [p.label_name, fmt(cell)])
 	p.cell = cell
 	busy = true
 	_refresh_view()
@@ -338,18 +401,19 @@ func _resolve_card(p: Piece, card_id: String, target_cell: Vector2i) -> void:
 	if card["cooldown"] > 0:
 		p.cooldowns[card_id] = card["cooldown"]
 	var target := piece_at(target_cell)
+	var physical: bool = card.get("damage_type", "magic") == "physical"
 	_log("%s 使用【%s】" % [p.label_name, card["name"]])
 
 	match card["effect"]:
 		"damage":
-			_damage(target, card["damage"])
+			_damage(target, card["damage"], physical)
 
 		"crit_attack":
 			var dmg: int = card["damage"]
 			if randf() < card["crit_chance"]:
 				dmg *= 2
 				_log("暴击！")
-			_damage(target, dmg)
+			_damage(target, dmg, physical)
 
 		"chain":
 			var hit: Array[Piece] = [target]
@@ -387,7 +451,7 @@ func _resolve_card(p: Piece, card_id: String, target_cell: Vector2i) -> void:
 
 		"rift":
 			var dest := _free_cell_next_to(target, p)
-			_log("%s 传送到 (%d, %d)" % [p.label_name, dest.x, dest.y])
+			_log("%s 传送到 %s" % [p.label_name, fmt(dest)])
 			p.cell = dest
 			busy = true
 			var tw := create_tween()
@@ -419,9 +483,12 @@ func _free_cell_next_to(target: Piece, from: Piece) -> Vector2i:
 	return best
 
 
-func _damage(target: Piece, amount: int) -> void:
+## physical = true 时扣除防御（至少 1 点）
+func _damage(target: Piece, amount: int, physical := false) -> void:
 	if target == null or not target.alive:
 		return
+	if physical:
+		amount = maxi(1, amount - target.defense)
 	target.hp = maxi(0, target.hp - amount)
 	target.flash()
 	target.queue_redraw()
@@ -430,6 +497,10 @@ func _damage(target: Piece, amount: int) -> void:
 	if target.hp == 0:
 		target.die()
 		_log("  [color=#f87171]%s 阵亡[/color]" % target.label_name)
+		if target == capture_piece:
+			capture_piece = null
+			capture_count = 0
+			_refresh_capture()
 
 
 func _heal(target: Piece, amount: int) -> void:
@@ -447,22 +518,26 @@ func _float(pos: Vector2, text: String, color: Color) -> void:
 	fx_root.add_child(f)
 
 
+## 对方棋子全部阵亡 → 获胜
 func _check_win() -> bool:
 	if game_over:
 		return true
-	var heroes_alive := [0, 0]
+	var alive := [0, 0]
 	for p in pieces:
-		if p.alive and p.is_hero:
-			heroes_alive[p.team] += 1
+		if p.alive:
+			alive[p.team] += 1
 	for team in [Team.BLUE, Team.RED]:
-		if heroes_alive[team] == 0:
-			var winner := Team.RED if team == Team.BLUE else Team.BLUE
-			game_over = true
-			_log("[b]%s 获胜！[/b]" % TEAM_NAME[winner])
-			_refresh_view()
-			hud.show_winner("%s 获胜！" % TEAM_NAME[winner], TEAM_COLOR[winner])
+		if alive[team] == 0:
+			_declare_win(Team.RED if team == Team.BLUE else Team.BLUE, "消灭对方全部棋子")
 			return true
 	return false
+
+
+func _declare_win(winner: int, reason: String) -> void:
+	game_over = true
+	_log("[b]%s 获胜！（%s）[/b]" % [TEAM_NAME[winner], reason])
+	_refresh_view()
+	hud.show_winner("%s 获胜！\n%s" % [TEAM_NAME[winner], reason], TEAM_COLOR[winner])
 
 
 # ================= 界面同步 =================
@@ -477,7 +552,7 @@ func _refresh_view() -> void:
 		o[c] = OVERLAY_TARGET
 	board.set_overlays(o)
 	board.selected = selected.cell if selected and selected.alive else Board.NO_CELL
-	board.queue_redraw()
+	_refresh_capture()
 
 	hud.set_turn(round_no, TEAM_NAME[current_team], TEAM_COLOR[current_team])
 	hud.set_hint(_hint_text())
@@ -532,11 +607,12 @@ func _hint_text() -> String:
 
 func _info_text(p: Piece) -> String:
 	if p == null or not p.alive:
-		return "未选择棋子\n\n蓝方泉水在左下，红方泉水在右上。\n泉水范围内：己方每回合 +%d 生命，敌方每回合受到 %d 伤害。\n\n胜利条件：消灭对方全部英雄。" % [FOUNTAIN_HEAL, FOUNTAIN_DAMAGE]
+		return ("未选择棋子\n\n泉水：蓝方 %s，红方 %s。每个己方回合开始，周围 5x5 内己方棋子 +%d 血，并随机攻击范围内一个敌人 %d 血。\n\n胜利：站上中央能量圈 %s，连续 %d 个己方回合开始时仍在上面；或消灭对方全部棋子。") % [
+			fmt(FOUNTAIN_CELLS[0]), fmt(FOUNTAIN_CELLS[1]), FOUNTAIN_HEAL, FOUNTAIN_DAMAGE, fmt(ENERGY_CELL), CAPTURE_TURNS]
 	var role := "英雄" if p.is_hero else "士兵"
 	var state := "正常" if p.stun == 0 else "眩晕（剩 %d 回合）" % p.stun
-	return "%s（%s）\n生命 %d / %d\n移动 %d 格\n状态：%s\n位置：(%d, %d)" % [
-		p.label_name, role, p.hp, p.max_hp, p.move, state, p.cell.x, p.cell.y]
+	return "%s（%s）\n血量 %d / %d\n防御 %d\n移动速度 %d\n状态：%s\n位置：%s" % [
+		p.label_name, role, p.hp, p.max_hp, p.defense, p.move, state, fmt(p.cell)]
 
 
 func _log(text: String) -> void:

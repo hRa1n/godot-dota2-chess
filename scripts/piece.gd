@@ -12,6 +12,7 @@ var label_name := ""        # 例：蓝·宙斯、红·士兵2
 var cell := Vector2i.ZERO
 var hp := 1
 var max_hp := 1
+var defense := 0
 var move := 1
 var cards: Array = []
 var cooldowns := {}         # 卡牌 id -> 剩余冷却（己方回合数）
@@ -31,6 +32,7 @@ func setup(p_type: String, p_team: int, p_color: Color, p_label: String, p_cell_
 	cell_size = p_cell_size
 	max_hp = def["hp"]
 	hp = max_hp
+	defense = def["defense"]
 	move = def["move"]
 	cards = def["cards"]
 	is_hero = def["hero"]
@@ -78,13 +80,18 @@ func _draw() -> void:
 	var baseline := (FONT.get_ascent(fs) - FONT.get_descent(fs)) * 0.5
 	draw_string(FONT, Vector2(-w * 0.5, baseline), short, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, Color.WHITE)
 
-	# 血条
+	# 血条（血量少时按格显示，一格 = 1 点血）
 	var bw := cell_size * 0.82
 	var top := -cell_size * 0.5 + 1
 	var ratio := float(hp) / max_hp
 	var bar_col := Color("#16a34a") if ratio > 0.5 else (Color("#eab308") if ratio > 0.25 else Color("#dc2626"))
-	draw_rect(Rect2(-bw * 0.5, top, bw, 5), Color(0, 0, 0, 0.55))
-	draw_rect(Rect2(-bw * 0.5, top, bw * ratio, 5), bar_col)
+	draw_rect(Rect2(-bw * 0.5, top, bw, 6), Color(0, 0, 0, 0.6))
+	if max_hp <= 12:
+		var seg := bw / max_hp
+		for i in hp:
+			draw_rect(Rect2(-bw * 0.5 + i * seg + 1, top + 1, seg - 2, 4), bar_col)
+	else:
+		draw_rect(Rect2(-bw * 0.5, top, bw * ratio, 6), bar_col)
 
 	# 眩晕标记
 	if stun > 0:

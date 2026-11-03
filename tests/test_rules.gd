@@ -1,6 +1,7 @@
 extends SceneTree
 ## 规则自动测试（无界面运行）：
 ##   godot --headless -s res://tests/test_rules.gd
+## 注意：测试里的坐标是内部坐标（从 0 开始），界面显示的是 +1 后的坐标。
 
 var fails := 0
 var game
@@ -30,110 +31,145 @@ func wait(sec: float) -> void:
 	await create_timer(sec).timeout
 
 
-func _initialize() -> void:
-	_run.call_deferred()
-
-
-func _run() -> void:
+func new_game() -> void:
+	if game:
+		game.queue_free()
+		await process_frame
 	game = load("res://scenes/main.tscn").instantiate()
 	root.add_child(game)
 	await process_frame
 	await process_frame
 
-	print("[布置]")
+
+func _initialize() -> void:
+	_run.call_deferred()
+
+
+func _run() -> void:
+	await new_game()
+
+	print("[布置与属性]")
 	check(game.pieces.size() == 12, "双方各 6 个棋子")
-	check(game.current_team == 0, "蓝方先手")
+	var all_ok := true
+	for p in game.pieces:
+		if p.max_hp != 5 or p.defense != 0 or p.move != 5 or p.cards != ["basic_attack"]:
+			all_ok = false
+	check(all_ok, "所有棋子 血量5 / 防御0 / 移动5，只有基础攻击卡")
+	check(game.FOUNTAIN_CELLS[0] == Vector2i(0, 10) and game.FOUNTAIN_CELLS[1] == Vector2i(20, 10), "泉水在 1-11 和 21-11")
+	check(game.ENERGY_CELL == Vector2i(10, 10), "能量圈在正中 11-11")
 	var b_ck := find("蓝·混沌骑士")
-	var b_zeus := find("蓝·宙斯")
-	var r_zeus := find("红·宙斯")
 	var r_ck := find("红·混沌骑士")
+	check(r_ck.cell == Vector2i(20 - b_ck.cell.x, b_ck.cell.y), "红方左右镜像布置")
+
+	print("[移动]")
+	place(b_ck, Vector2i(8, 4))      # 空旷处
+	game._on_cell_clicked(b_ck.cell)
+	check(game.move_cells.has(b_ck.cell + Vector2i(5, 0)), "可以走 5 格")
+	check(not game.move_cells.has(b_ck.cell + Vector2i(6, 0)), "不能走 6 格")
+
+	print("[基础攻击：3x3 范围，物理伤害 2]")
 	var r_s1 := find("红·士兵1")
-	check(b_ck != null and r_zeus != null and r_s1 != null, "棋子命名正确")
-	check(r_zeus.cell == Vector2i(18, 2), "红方布置为中心对称")
-
-	print("[移动 + 普通攻击]")
-	place(r_s1, Vector2i(4, 13))
-	game._on_cell_clicked(b_ck.cell)
-	check(game.selected == b_ck, "点击己方棋子可选中")
-	check(game.move_cells.has(Vector2i(4, 14)), "显示可移动格")
-	check(not game.move_cells.has(Vector2i(4, 13)), "有棋子的格子不能走")
-	game._on_cell_clicked(Vector2i(4, 14))
-	await wait(0.4)
-	check(b_ck.cell == Vector2i(4, 14), "移动成功")
-	game._on_cell_clicked(b_zeus.cell)
-	check(not game.can_control(b_zeus), "移动后本回合锁定为该棋子")
-	game._on_cell_clicked(b_ck.cell)
-	game._on_card_pressed("ck_attack")
-	check(game.target_cells.has(Vector2i(4, 13)), "相邻敌人可作为攻击目标")
-	game._on_cell_clicked(Vector2i(4, 13))
-	check(r_s1.hp == 15 or r_s1.hp == 5, "普通攻击造成 10 伤害（或暴击 20），剩 %d" % r_s1.hp)
-	await wait(1.0)
-	check(game.current_team == 1, "移动+出牌后自动结束回合")
-
-	print("[天罚 + 冷却]")
-	var ck_hp := b_ck.hp
-	var zeus_hp := b_zeus.hp
-	game._on_cell_clicked(r_zeus.cell)
-	game._on_card_pressed("zeus_wrath")
-	check(b_ck.hp == ck_hp - 12 and b_zeus.hp == zeus_hp - 12, "天罚命中全场敌方英雄")
-	check(r_zeus.cooldown_of("zeus_wrath") == 6, "天罚进入冷却 6")
-	check(not game.card_usable(r_zeus, "zeus_attack"), "一回合只能出一张牌")
+	place(b_ck, Vector2i(10, 5))
+	place(r_s1, Vector2i(11, 6))     # 斜角
+	game._select(b_ck)
+	game._on_card_pressed("basic_attack")
+	check(game.target_cells.has(Vector2i(11, 6)), "斜角相邻的敌人可以攻击")
+	check(game.range_cells.size() == 8, "攻击范围是周围 8 格（3x3）")
+	game._on_cell_clicked(Vector2i(11, 6))
+	check(r_s1.hp == 3, "造成 2 点伤害，剩 %d" % r_s1.hp)
 	game.end_turn()
-	check(r_zeus.cooldown_of("zeus_wrath") == 5, "己方回合结束冷却 -1")
-
-	print("[混沌飞弹 + 眩晕]")
-	r_s1.hp = r_s1.max_hp   # 保证不会被打死，便于检查眩晕
-	game._on_cell_clicked(b_ck.cell)
-	game._on_card_pressed("ck_bolt")
-	check(game.target_cells.has(r_s1.cell), "混沌飞弹可选目标")
+	game.end_turn()
+	r_s1.defense = 1
+	game._select(b_ck)
+	game._on_card_pressed("basic_attack")
 	game._on_cell_clicked(r_s1.cell)
-	if r_s1.alive:
-		check(r_s1.stun >= 1, "目标被眩晕 %d 回合" % r_s1.stun)
-		game.end_turn()
-		check(not game.can_control(r_s1), "被眩晕的棋子不能行动")
-		game.end_turn()
-	else:
-		print("  (士兵已被击杀，跳过眩晕检查)")
-		game.end_turn()
-		game.end_turn()
-
-	print("[裂隙突袭]")
-	check(game.current_team == 0, "回到蓝方回合")
-	b_ck.cooldowns.clear()
-	place(r_ck, Vector2i(7, 12))   # 与 (4,14) 距离 5
-	game._on_cell_clicked(b_ck.cell)
-	game._on_card_pressed("ck_rift")
-	check(game.target_cells.has(r_ck.cell), "裂隙突袭可选 5 格内敌人")
-	var rck_hp := r_ck.hp
-	game._on_cell_clicked(r_ck.cell)
-	await wait(0.5)
-	check(Game_manhattan(b_ck.cell, r_ck.cell) == 1, "传送到目标相邻格 %s" % str(b_ck.cell))
-	check(r_ck.hp == rck_hp - 8, "裂隙突袭造成 8 伤害")
+	check(r_s1.hp == 2, "防御 1 时只受 1 点伤害，剩 %d" % r_s1.hp)
 	game.end_turn()
+	game.end_turn()
+	r_s1.defense = 9
+	game._select(b_ck)
+	game._on_card_pressed("basic_attack")
+	game._on_cell_clicked(r_s1.cell)
+	check(r_s1.hp == 1, "防御高于伤害时至少 1 点，剩 %d" % r_s1.hp)
+	r_s1.defense = 0
+	place(r_s1, Vector2i(12, 7))     # 距离 2
+	game.end_turn()
+	game.end_turn()
+	game._select(b_ck)
+	game._on_card_pressed("basic_attack")
+	check(not game.target_cells.has(Vector2i(12, 7)), "2 格外的敌人打不到")
+	game._cancel_targeting()
 
 	print("[泉水]")
-	var r_s2 := find("红·士兵2")
-	place(r_s2, Vector2i(1, 19))
-	var s2_hp := r_s2.hp
-	game.end_turn()   # 红方结束 -> 蓝方回合开始，蓝方泉水攻击范围内的敌人
-	check(r_s2.hp == maxi(0, s2_hp - 20), "敌方进入泉水范围受到 20 伤害")
-	b_zeus.hp = 10
-	place(b_zeus, Vector2i(2, 18))
+	await new_game()
+	var b_zeus := find("蓝·宙斯")
+	b_zeus.hp = 2
+	var r_a := find("红·士兵1")
+	var r_b := find("红·士兵2")
+	place(r_a, Vector2i(2, 9))
+	place(r_b, Vector2i(2, 11))
+	game.end_turn()   # -> 红方
+	game.end_turn()   # -> 蓝方回合开始，泉水结算
+	check(b_zeus.hp == 4, "范围内友军 +2 血（2 -> %d）" % b_zeus.hp)
+	var hit := int(r_a.hp < 5) + int(r_b.hp < 5)
+	check(hit == 1, "只随机攻击范围内 1 个敌人")
+	check((not r_a.alive) or (not r_b.alive), "泉水伤害 5，5 血的棋子直接阵亡")
+	b_zeus.hp = 4
 	game.end_turn()
 	game.end_turn()
-	check(b_zeus.hp == 20, "己方在泉水范围内回复 10 生命")
+	check(b_zeus.hp == 5, "回血不超过上限")
+	r_ck = find("红·混沌骑士")
+	place(find("红·士兵3"), Vector2i(3, 13))   # 范围外
+	var s3_hp := find("红·士兵3").hp
+	game.end_turn()
+	game.end_turn()
+	check(find("红·士兵3").hp == s3_hp, "范围外的敌人不受伤")
 
-	print("[胜负]")
-	r_zeus.hp = 1
-	r_ck.hp = 1
-	game._damage(r_zeus, 5)
-	game._damage(r_ck, 5)
-	check(game._check_win(), "消灭对方全部英雄后游戏结束")
-	check(game.game_over, "game_over 状态正确")
+	print("[能量圈]")
+	await new_game()
+	b_ck = find("蓝·混沌骑士")
+	place(b_ck, Vector2i(7, 10))
+	game._select(b_ck)
+	game._on_cell_clicked(Vector2i(10, 10))   # 走上能量圈
+	await wait(0.4)
+	check(b_ck.cell == Vector2i(10, 10), "能量圈可以站上去")
+	check(game.capture_count == 0, "站上去当回合不计数")
+	game.end_turn()            # 红方
+	check(game.capture_count == 0, "对方回合不计数")
+	game.end_turn()            # 蓝方第 1 次开场
+	check(game.capture_count == 1 and not game.game_over, "己方开场计 1/2")
+	game.end_turn()
+	game.end_turn()            # 蓝方第 2 次开场
+	check(game.game_over, "己方第 2 次开场仍在圈上 → 获胜")
+
+	print("[离开能量圈清零]")
+	await new_game()
+	b_ck = find("蓝·混沌骑士")
+	place(b_ck, Vector2i(10, 10))
+	game.end_turn()
+	game.end_turn()
+	check(game.capture_count == 1, "计到 1/2")
+	game._select(b_ck)
+	game._on_cell_clicked(Vector2i(10, 12))
+	await wait(0.4)
+	game.end_turn()
+	game.end_turn()
+	check(game.capture_count == 0 and not game.game_over, "离开后清零")
+
+	print("[被打死清零]")
+	place(b_ck, Vector2i(10, 10))
+	game.end_turn()
+	game.end_turn()
+	check(game.capture_count == 1, "重新占领计 1/2")
+	game._damage(b_ck, 99)
+	check(game.capture_count == 0, "占领者阵亡后清零")
+
+	print("[全灭获胜]")
+	for p in game.pieces:
+		if p.team == 1:
+			p.hp = 1
+			game._damage(p, 5)
+	check(game._check_win() and game.game_over, "对方棋子全部阵亡 → 获胜")
 
 	print("\n结果：%s（失败 %d 项）" % ["全部通过" if fails == 0 else "有失败", fails])
 	quit(1 if fails > 0 else 0)
-
-
-func Game_manhattan(a: Vector2i, b: Vector2i) -> int:
-	return absi(a.x - b.x) + absi(a.y - b.y)

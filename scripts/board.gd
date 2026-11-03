@@ -1,6 +1,6 @@
 class_name Board
 extends Node2D
-## 21x21 棋盘：负责格子坐标换算、绘制（格子、泉水范围、高亮）、把点击/悬停转成格子坐标。
+## 21x21 棋盘：负责格子坐标换算、绘制（格子、泉水、能量圈、高亮）、把点击/悬停转成格子坐标。
 ## 棋盘本身不管游戏规则，规则在 game.gd 里。
 
 signal cell_hovered(cell: Vector2i)
@@ -28,6 +28,10 @@ var selected: Vector2i = NO_CELL
 ## 泉水：格子 -> 阵营颜色
 var fountains: Dictionary = {}
 var fountain_radius := 2
+## 能量圈
+var energy_cell: Vector2i = NO_CELL
+var energy_progress := 0.0
+var energy_owner_color := Color.WHITE
 ## 规则层传进来的高亮：格子 -> 颜色
 var overlays: Dictionary = {}
 
@@ -108,6 +112,10 @@ func _draw() -> void:
 				if is_in_bounds(c):
 					draw_rect(cell_rect(c), tint)
 
+	# 能量圈底色
+	if energy_cell != NO_CELL:
+		draw_rect(cell_rect(energy_cell), Color(0.66, 0.33, 0.97, 0.35))
+
 	# 规则层高亮（可移动、射程、目标）
 	for c in overlays:
 		draw_rect(cell_rect(c), overlays[c])
@@ -130,6 +138,18 @@ func _draw() -> void:
 		draw_arc(center, r * 0.7, 0, TAU, 32, Color(1, 1, 1, 0.5), 1.5)
 		_draw_centered_text("泉", center, 20, Color.WHITE)
 
+	# 能量圈本体：紫色光环 + 占领进度
+	if energy_cell != NO_CELL:
+		var ec := cell_center(energy_cell)
+		var er := cell_size * 0.47
+		draw_arc(ec, er, 0, TAU, 48, Color("#a855f7"), 3.0)
+		draw_arc(ec, er * 0.62, 0, TAU, 36, Color(0.75, 0.52, 0.99, 0.7), 1.5)
+		for i in 4:
+			var a := TAU * i / 4.0 + PI / 4.0
+			draw_circle(ec + Vector2.from_angle(a) * er, 3.0, Color("#e9d5ff"))
+		if energy_progress > 0.0:
+			draw_arc(ec, er + 4, -PI / 2, -PI / 2 + TAU * energy_progress, 48, energy_owner_color, 5.0)
+
 	# 悬停 / 选中
 	if hovered != NO_CELL:
 		draw_rect(cell_rect(hovered), COLOR_HOVER)
@@ -139,16 +159,16 @@ func _draw() -> void:
 	# 外框
 	draw_rect(Rect2(Vector2.ZERO, size_px), COLOR_BORDER, false, 3.0)
 
-	# 行列编号
 	var fs := 14
+	# 行列编号：显示从 1 开始（内部坐标从 0 开始）
 	for x in COLS:
 		var cx := x * cell_size + cell_size * 0.5
-		_draw_centered_text(str(x), Vector2(cx, -14), fs, COLOR_LABEL)
-		_draw_centered_text(str(x), Vector2(cx, size_px.y + 14), fs, COLOR_LABEL)
+		_draw_centered_text(str(x + 1), Vector2(cx, -14), fs, COLOR_LABEL)
+		_draw_centered_text(str(x + 1), Vector2(cx, size_px.y + 14), fs, COLOR_LABEL)
 	for y in ROWS:
 		var cy := y * cell_size + cell_size * 0.5
-		_draw_centered_text(str(y), Vector2(-14, cy), fs, COLOR_LABEL)
-		_draw_centered_text(str(y), Vector2(size_px.x + 14, cy), fs, COLOR_LABEL)
+		_draw_centered_text(str(y + 1), Vector2(-14, cy), fs, COLOR_LABEL)
+		_draw_centered_text(str(y + 1), Vector2(size_px.x + 14, cy), fs, COLOR_LABEL)
 
 
 func _draw_centered_text(t: String, center: Vector2, fs: int, col: Color) -> void:
