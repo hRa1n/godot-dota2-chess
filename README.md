@@ -58,6 +58,7 @@
 
 - `assets/icons/`：原创矢量图标（宙斯=闪电，混沌骑士=马首，天辉小兵=绿盾，夜魇小兵=红盾，卡面=剑）
 - `assets/portraits/`：头像替换目录，放入同名 PNG 即可覆盖默认图标，说明见该目录的 README
+- [`资源/dota2-minimap-hero-sprites/`](资源/dota2-minimap-hero-sprites/)：Dota 2 小地图英雄像素头像（32×32，127 个英雄 + 50 张变体，Valve 素材），来源、内部代号对照和用法见[该目录的 README](资源/dota2-minimap-hero-sprites/README.md)
 
 ## 版权说明
 
@@ -93,6 +94,7 @@ scripts/float_text.gd         伤害/治疗飘字
 scripts/background.gd         战场背景（天辉 / 夜魇两套，回合切换时淡入淡出）
 tests/test_rules.gd           规则自动测试
 assets/fonts/                 思源黑体（Noto Sans SC）常用字子集，SIL OFL 1.1 授权
+资源/dota2-minimap-hero-sprites/  Dota 2 小地图英雄像素头像（32×32），索引见 heroes.csv
 export_presets.cfg            网页导出配置（单线程，无需特殊响应头）
 .github/workflows/deploy-web.yml  推送后自动导出并发布到 GitHub Pages
 ```
