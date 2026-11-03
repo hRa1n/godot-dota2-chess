@@ -5,9 +5,14 @@ extends Node2D
 const FONT := preload("res://assets/fonts/NotoSansSC-Subset.otf")
 ## 棋子图标（原创矢量图）。士兵按阵营区分：[天辉, 夜魇]
 const ICONS := {
-	"zeus": [preload("res://assets/icons/zeus.svg"), preload("res://assets/icons/zeus.svg")],
-	"chaos_knight": [preload("res://assets/icons/knight.svg"), preload("res://assets/icons/knight.svg")],
-	"soldier": [preload("res://assets/icons/creep_radiant.svg"), preload("res://assets/icons/creep_dire.svg")],
+	"zeus": "res://assets/icons/zeus.svg",
+	"crystal_maiden": "res://assets/icons/snow.svg",
+	"juggernaut": "res://assets/icons/blade.svg",
+	"chaos_knight": "res://assets/icons/knight.svg",
+	"axe": "res://assets/icons/axe.svg",
+	"pudge": "res://assets/icons/hook.svg",
+	"illusion": "res://assets/icons/knight.svg",
+	"soldier": ["res://assets/icons/creep_radiant.svg", "res://assets/icons/creep_dire.svg"],
 }
 
 var type_id := ""
@@ -19,6 +24,8 @@ var cell := Vector2i.ZERO
 var hp := 1
 var max_hp := 1
 var defense := 0
+var atk_bonus := 0          # 基础攻击额外伤害（装备）
+var equipment: Array[String] = []
 var move := 1
 var cards: Array = []
 var cooldowns := {}         # 卡牌 id -> 剩余冷却（己方回合数）
@@ -48,7 +55,8 @@ func setup(p_type: String, p_team: int, p_color: Color, p_label: String, p_cell_
 	cards = def["cards"]
 	is_hero = def["hero"]
 	z_index = 1
-	_icon = ICONS[type_id][team]
+	var icon_path = ICONS[type_id]
+	_icon = load(icon_path[team] if icon_path is Array else icon_path)
 	var file := type_id
 	if type_id == "soldier":
 		file = "soldier_radiant" if team == 0 else "soldier_dire"
@@ -90,6 +98,8 @@ func _draw() -> void:
 	if highlight:
 		draw_circle(Vector2.ZERO, r + 6, Color(0.98, 0.8, 0.08, 0.5))
 	draw_circle(Vector2(2, 3), r, Color(0, 0, 0, 0.3))        # 阴影
+	if type_id == "illusion":                                  # 幻象：半透明紫色
+		self_modulate = Color(0.85, 0.7, 1.0, 0.75)
 	draw_circle(Vector2.ZERO, r, team_color)                   # 阵营色外圈
 	draw_circle(Vector2.ZERO, r - 3.5, Color("#0f172a"))       # 深色底
 	draw_arc(Vector2.ZERO, r, 0, TAU, 48, Color("#fbbf24") if is_hero else Color(1, 1, 1, 0.75), 2.5 if is_hero else 1.5)

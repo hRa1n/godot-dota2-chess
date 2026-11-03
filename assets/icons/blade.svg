@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 64 64">
+  <!-- 旋风 -->
+  <path d="M32 6 A26 26 0 1 1 8 40" fill="none" stroke="#fb923c" stroke-width="3" stroke-linecap="round" opacity="0.8"/>
+  <path d="M32 14 A18 18 0 1 1 15 38" fill="none" stroke="#fdba74" stroke-width="2.5" stroke-linecap="round" opacity="0.7"/>
+  <!-- 弯刀 -->
+  <path d="M14 50 C26 40 40 26 52 8 C50 22 40 38 20 54 Z" fill="#f1f5f9" stroke="#334155" stroke-width="2.2" stroke-linejoin="round"/>
+  <path d="M10 48 L20 58" stroke="#b45309" stroke-width="5" stroke-linecap="round"/>
+  <path d="M15 53 L7 61" stroke="#7c2d12" stroke-width="4" stroke-linecap="round"/>
+</svg>

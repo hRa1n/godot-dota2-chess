@@ -4,6 +4,7 @@ extends CanvasLayer
 ## 全部用代码搭建，只负责显示和发信号，不含规则。
 
 signal card_pressed(card_id: String)
+signal hand_card_pressed(uid: int)
 signal end_turn_pressed
 signal restart_pressed
 
@@ -15,6 +16,10 @@ var info_label: Label
 var capture_label: Label
 var log_label: RichTextLabel
 var cards_flow: HFlowContainer
+var hand_root: Control
+var hand_label: Label
+var _hand_cards: Array = []
+const HAND_CARD_SIZE := Vector2(150, 231)
 var end_btn: Button
 var win_panel: PanelContainer
 var win_label: Label
@@ -82,6 +87,25 @@ func _ready() -> void:
 	log_label.add_theme_font_size_override("normal_font_size", 13)
 	log_label.add_theme_font_size_override("bold_font_size", 13)
 	log_panel.add_child(log_label)
+
+	# 底部：手牌栏（位于左侧卡牌栏右边、结束回合按钮左边）
+	hand_label = _label(15)
+	hand_label.anchor_top = 1.0
+	hand_label.anchor_bottom = 1.0
+	hand_label.offset_left = 390
+	hand_label.offset_top = -270
+	root.add_child(hand_label)
+	hand_root = Control.new()
+	hand_root.anchor_top = 1.0
+	hand_root.anchor_bottom = 1.0
+	hand_root.anchor_right = 1.0
+	hand_root.offset_left = 384
+	hand_root.offset_right = -170
+	hand_root.offset_top = -244
+	hand_root.offset_bottom = -6
+	hand_root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	hand_root.resized.connect(_layout_hand)
+	root.add_child(hand_root)
 
 	# 右下：结束回合
 	end_btn = Button.new()
@@ -159,8 +183,42 @@ func set_cards(cards: Array) -> void:
 	for c in cards:
 		var v := CardView.new()
 		v.setup(c)
-		v.clicked.connect(card_pressed.emit)
+		v.clicked.connect(func(info): card_pressed.emit(info["id"]))
 		cards_flow.add_child(v)
+
+
+## 手牌：横向排开，放不下时叠在一起；悬停的那张会上浮
+func set_hand(cards: Array, header: String) -> void:
+	hand_label.text = header
+	for c in hand_root.get_children():
+		hand_root.remove_child(c)
+		c.queue_free()
+	_hand_cards.clear()
+	for c in cards:
+		var v := CardView.new()
+		v.setup(c, HAND_CARD_SIZE)
+		v.raise_on_hover = true
+		v.clicked.connect(func(info): hand_card_pressed.emit(info["uid"]))
+		hand_root.add_child(v)
+		_hand_cards.append(v)
+	_layout_hand()
+
+
+func _layout_hand() -> void:
+	var n := _hand_cards.size()
+	if n == 0:
+		return
+	var w := HAND_CARD_SIZE.x
+	var avail := hand_root.size.x
+	var step := w + 10
+	if n > 1 and step * (n - 1) + w > avail:
+		step = maxf(24.0, (avail - w) / (n - 1))
+	var total := step * (n - 1) + w
+	var x0 := maxf(0.0, (avail - total) * 0.5)
+	for i in n:
+		var v: CardView = _hand_cards[i]
+		v.base_y = 0.0
+		v.position = Vector2(x0 + step * i, 0.0)
 
 
 func show_winner(text: String, color: Color) -> void:

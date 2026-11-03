@@ -11,7 +11,7 @@ extends Camera2D
 @export var hud_left := 384.0
 @export var hud_right := 330.0
 @export var hud_top := 80.0
-@export var hud_bottom := 24.0
+@export var hud_bottom := 278.0
 
 var _board: Board
 var _dragging := false
