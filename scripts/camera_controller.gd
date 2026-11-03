@@ -7,8 +7,9 @@ extends Camera2D
 @export var max_zoom := 3.0
 @export var zoom_step := 1.12
 @export var key_pan_speed := 900.0
-## 屏幕顶部留给信息栏的像素高度
-@export var hud_reserved := 60.0
+## 屏幕上方 / 下方留给界面（回合信息、卡牌栏）的像素高度
+@export var hud_top := 76.0
+@export var hud_bottom := 132.0
 
 var _board: Board
 var _dragging := false
@@ -24,12 +25,12 @@ func fit_to_board() -> void:
 	var rect := _board.full_rect()
 	rect.position += _board.global_position
 	var vs := get_viewport_rect().size
-	var avail := Vector2(vs.x, vs.y - hud_reserved)
-	var z := minf(avail.x / rect.size.x, avail.y / rect.size.y) * 0.96
+	var avail := Vector2(vs.x, vs.y - hud_top - hud_bottom)
+	var z := minf(avail.x / rect.size.x, avail.y / rect.size.y) * 0.97
 	z = clampf(z, min_zoom, max_zoom)
 	zoom = Vector2(z, z)
-	# 顶部留出信息栏的高度，棋盘放在剩余区域的正中
-	position = rect.get_center() - Vector2(0, hud_reserved * 0.5 / z)
+	# 棋盘放在上下界面之间的区域正中
+	position = rect.get_center() - Vector2(0, (hud_top - hud_bottom) * 0.5 / z)
 
 
 func _zoom_at(screen_pos: Vector2, factor: float) -> void:

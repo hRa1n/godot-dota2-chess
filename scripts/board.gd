@@ -1,30 +1,35 @@
 class_name Board
 extends Node2D
-## 20x20 棋盘：负责格子坐标换算、绘制、悬停/选中。
-## 后续的棋子、地形、技能范围都基于这里的坐标 API。
+## 21x21 棋盘：负责格子坐标换算、绘制（格子、泉水范围、高亮）、把点击/悬停转成格子坐标。
+## 棋盘本身不管游戏规则，规则在 game.gd 里。
 
 signal cell_hovered(cell: Vector2i)
 signal cell_clicked(cell: Vector2i)
 
-const COLS := 20
-const ROWS := 20
+const COLS := 21
+const ROWS := 21
 const NO_CELL := Vector2i(-1, -1)
+const FONT := preload("res://assets/fonts/NotoSansSC-Subset.otf")
 
 @export var cell_size: int = 48
 ## 棋盘外围留给行列编号的边距（像素）
 @export var label_margin: int = 28
 
-const COLOR_LIGHT := Color("#4b5a46")
-const COLOR_DARK := Color("#3e4b3a")
-const COLOR_GRID := Color("#2b3429")
-const COLOR_BORDER := Color("#c9a85a")
-const COLOR_HOVER := Color(1, 1, 1, 0.16)
-const COLOR_SELECT_FILL := Color(0.95, 0.79, 0.30, 0.28)
-const COLOR_SELECT_LINE := Color("#f2c94c")
-const COLOR_LABEL := Color("#9aa596")
+const COLOR_WHITE := Color("#f3f7fc")
+const COLOR_BLUE := Color("#b7d4f0")
+const COLOR_GRID := Color("#8fb2d4")
+const COLOR_BORDER := Color("#2f5d8a")
+const COLOR_HOVER := Color(0.1, 0.25, 0.5, 0.18)
+const COLOR_SELECT_LINE := Color("#f59e0b")
+const COLOR_LABEL := Color("#9fb3c8")
 
 var hovered: Vector2i = NO_CELL
 var selected: Vector2i = NO_CELL
+## 泉水：格子 -> 阵营颜色
+var fountains: Dictionary = {}
+var fountain_radius := 2
+## 规则层传进来的高亮：格子 -> 颜色
+var overlays: Dictionary = {}
 
 
 # ---------- 坐标 API ----------
@@ -60,6 +65,11 @@ func cell_rect(cell: Vector2i) -> Rect2:
 	return Rect2(cell_to_local(cell), Vector2.ONE * cell_size)
 
 
+func set_overlays(o: Dictionary) -> void:
+	overlays = o
+	queue_redraw()
+
+
 # ---------- 输入 ----------
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -74,8 +84,6 @@ func _unhandled_input(event: InputEvent) -> void:
 		var cell := local_to_cell(get_local_mouse_position())
 		if cell == NO_CELL:
 			return
-		selected = NO_CELL if cell == selected else cell
-		queue_redraw()
 		cell_clicked.emit(cell)
 		get_viewport().set_input_as_handled()
 
@@ -85,11 +93,24 @@ func _unhandled_input(event: InputEvent) -> void:
 func _draw() -> void:
 	var size_px := board_size_px()
 
-	# 格子（棋盘交错色）
+	# 格子：蓝白交错
 	for y in ROWS:
 		for x in COLS:
-			var c := Vector2i(x, y)
-			draw_rect(cell_rect(c), COLOR_LIGHT if (x + y) % 2 == 0 else COLOR_DARK)
+			draw_rect(cell_rect(Vector2i(x, y)), COLOR_WHITE if (x + y) % 2 == 0 else COLOR_BLUE)
+
+	# 泉水范围（淡色）
+	for f in fountains:
+		var tint: Color = fountains[f]
+		tint.a = 0.16
+		for dy in range(-fountain_radius, fountain_radius + 1):
+			for dx in range(-fountain_radius, fountain_radius + 1):
+				var c: Vector2i = f + Vector2i(dx, dy)
+				if is_in_bounds(c):
+					draw_rect(cell_rect(c), tint)
+
+	# 规则层高亮（可移动、射程、目标）
+	for c in overlays:
+		draw_rect(cell_rect(c), overlays[c])
 
 	# 网格线
 	for i in range(1, COLS):
@@ -99,29 +120,38 @@ func _draw() -> void:
 		var py := i * cell_size
 		draw_line(Vector2(0, py), Vector2(size_px.x, py), COLOR_GRID, 1.0)
 
+	# 泉水本体
+	for f in fountains:
+		var col: Color = fountains[f]
+		var center := cell_center(f)
+		var r := cell_size * 0.44
+		draw_circle(center, r, col.darkened(0.15))
+		draw_arc(center, r, 0, TAU, 40, Color.WHITE, 3.0)
+		draw_arc(center, r * 0.7, 0, TAU, 32, Color(1, 1, 1, 0.5), 1.5)
+		_draw_centered_text("泉", center, 20, Color.WHITE)
+
 	# 悬停 / 选中
 	if hovered != NO_CELL:
 		draw_rect(cell_rect(hovered), COLOR_HOVER)
 	if selected != NO_CELL:
-		var r := cell_rect(selected)
-		draw_rect(r, COLOR_SELECT_FILL)
-		draw_rect(r.grow(-1.5), COLOR_SELECT_LINE, false, 3.0)
+		draw_rect(cell_rect(selected).grow(-1.5), COLOR_SELECT_LINE, false, 3.0)
 
 	# 外框
 	draw_rect(Rect2(Vector2.ZERO, size_px), COLOR_BORDER, false, 3.0)
 
-	# 行列编号（0~19）
-	var font := ThemeDB.fallback_font
+	# 行列编号
 	var fs := 14
 	for x in COLS:
-		var t := str(x)
-		var w := font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-		var cx := x * cell_size + cell_size * 0.5 - w * 0.5
-		draw_string(font, Vector2(cx, -9), t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, COLOR_LABEL)
-		draw_string(font, Vector2(cx, size_px.y + 20), t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, COLOR_LABEL)
+		var cx := x * cell_size + cell_size * 0.5
+		_draw_centered_text(str(x), Vector2(cx, -14), fs, COLOR_LABEL)
+		_draw_centered_text(str(x), Vector2(cx, size_px.y + 14), fs, COLOR_LABEL)
 	for y in ROWS:
-		var t := str(y)
-		var w := font.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
-		var cy := y * cell_size + cell_size * 0.5 + fs * 0.35
-		draw_string(font, Vector2(-8 - w, cy), t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, COLOR_LABEL)
-		draw_string(font, Vector2(size_px.x + 8, cy), t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, COLOR_LABEL)
+		var cy := y * cell_size + cell_size * 0.5
+		_draw_centered_text(str(y), Vector2(-14, cy), fs, COLOR_LABEL)
+		_draw_centered_text(str(y), Vector2(size_px.x + 14, cy), fs, COLOR_LABEL)
+
+
+func _draw_centered_text(t: String, center: Vector2, fs: int, col: Color) -> void:
+	var w := FONT.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
+	var baseline := center.y + (FONT.get_ascent(fs) - FONT.get_descent(fs)) * 0.5
+	draw_string(FONT, Vector2(center.x - w * 0.5, baseline), t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
