@@ -100,6 +100,11 @@ func _run() -> void:
 	for e in game.hands[0]:
 		only_equip = only_equip and PieceDefs.CARDS[e["id"]]["kind"] == "equip"
 	check(only_equip, "手牌里只有装备卡")
+	game.decks[0].append("jugg_omni")
+	game.decks[0].append("item_boots")
+	var res: Array = game._draw_cards(0, 2)
+	check(res.size() == 2 and res[0]["kind"] == "equip" and res[1]["kind"] in ["skill", "burn"], "抽卡演出拿到每张牌的类型（装备 / 技能）")
+	check(res[1]["caption"].contains("剑圣") or res[1]["kind"] == "burn", "技能卡的说明写着哪个英雄解锁")
 	var deck_ok := true
 	for id in game.decks[0] + game.hands[0].map(func(e): return e["id"]):
 		var c: Dictionary = PieceDefs.CARDS[id]
@@ -307,7 +312,7 @@ func _run() -> void:
 	check(zeus.move == 7 and game.move_cells.has(Vector2i(8, 5)), "速度之靴：移动 +2，本回合生效")
 	await next_own_turn()
 	await play(zeus, "item_mail")
-	check(zeus.defense == 1 and zeus.equipment.has("锁子甲"), "锁子甲：防御 +1，记入装备")
+	check(zeus.defense == 1 and zeus.equipment.has("item_mail"), "锁子甲：防御 +1，记入装备")
 	await next_own_turn()
 	await play(zeus, "item_blade")
 	check(zeus.atk_bonus == 1, "阔剑：攻击 +1")
@@ -325,9 +330,25 @@ func _run() -> void:
 	check(zeus.max_hp == 7 and zeus.hp == 4, "活力宝珠：上限 +2，回复 2")
 	await next_own_turn()
 	await play(zeus, "item_salve")
-	check(zeus.hp == 7 and not zeus.equipment.has("治疗药膏"), "治疗药膏：回复 3，不算装备")
+	check(zeus.hp == 7 and not zeus.equipment.has("item_salve"), "治疗药膏：回复 3，不算装备")
 	game._damage(zeus, 2, true)
 	check(zeus.hp == 6, "防御 1 时 2 点物理伤害只扣 1")
+
+	print("[装备不占行动]")
+	await new_game()
+	zeus = find("天辉·宙斯")
+	var cmx := find("天辉·水晶室女")
+	await play(zeus, "item_mail")
+	check(not game.has_used_card and game.active == null, "装备后没有用掉行动，也没锁定棋子")
+	await play(cmx, "item_blade")
+	check(cmx.atk_bonus == 1 and not game.has_used_card, "同一回合可以给另一个英雄再装一件")
+	game._select(zeus)
+	game._on_card_pressed("basic_attack")
+	check(game.pending_card == "basic_attack", "装备之后仍然可以出行动卡")
+	game._cancel_targeting()
+	var info: Dictionary = game._equipment_slots(zeus)
+	check(info["slots"].size() == 1 and info["slots"][0]["name"] == "锁子甲", "详情页装备栏显示已装备的锁子甲")
+	check(game._equipment_slots(find("天辉·士兵1")).is_empty(), "小兵没有装备栏")
 
 	print("[装备栏]")
 	await new_game()
@@ -357,7 +378,7 @@ func _run() -> void:
 	await next_own_turn()
 	check(zeus.alive and zeus.cell == Vector2i(6, 9), "第 2 个己方回合：在泉水旁顺时针第一个空位复活 %s" % game.fmt(zeus.cell))
 	check(zeus.hp == zeus.max_hp and zeus.max_hp == 7, "复活满血（含装备加成）")
-	check(zeus.cards.has("zeus_bolt") and zeus.equipment.has("活力宝珠"), "复活后保留技能和装备")
+	check(zeus.cards.has("zeus_bolt") and zeus.equipment.has("item_orb"), "复活后保留技能和装备")
 	var sol2 := find("天辉·士兵2")
 	game._damage(sol2, 99)
 	await next_own_turn()

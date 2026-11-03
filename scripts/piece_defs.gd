@@ -233,32 +233,32 @@ const CARDS := {
 	# ======================= 装备 =======================
 	"item_mail": {
 		"name": "锁子甲", "kind": "equip", "target": "none", "effect": "equip",
-		"stats": {"defense": 1}, "art": "armor",
+		"stats": {"defense": 1}, "art": "armor", "slot_text": "防御 +1",
 		"card_text": "装备：防御 +1",
-		"desc": "给本回合行动的英雄装备：防御永久 +1（物理伤害减 1）。占 1 个装备栏，装上不能卸。",
+		"desc": "给选中的己方英雄装备：防御永久 +1（物理伤害减 1）。不占行动；占 1 个装备栏，装上不能卸。",
 	},
 	"item_blade": {
 		"name": "阔剑", "kind": "equip", "target": "none", "effect": "equip",
-		"stats": {"atk": 1}, "art": "sword",
+		"stats": {"atk": 1}, "art": "sword", "slot_text": "攻击 +1",
 		"card_text": "装备：基础攻击伤害 +1",
-		"desc": "给本回合行动的英雄装备：基础攻击伤害永久 +1。占 1 个装备栏，装上不能卸。",
+		"desc": "给选中的己方英雄装备：基础攻击伤害永久 +1。不占行动；占 1 个装备栏，装上不能卸。",
 	},
 	"item_boots": {
 		"name": "速度之靴", "kind": "equip", "target": "none", "effect": "equip",
-		"stats": {"move": 2}, "art": "boots",
+		"stats": {"move": 2}, "art": "boots", "slot_text": "移动 +2",
 		"card_text": "装备：移动速度 +2",
-		"desc": "给本回合行动的英雄装备：移动速度永久 +2，还没移动的话本回合就生效。占 1 个装备栏，装上不能卸。",
+		"desc": "给选中的己方英雄装备：移动速度永久 +2，还没移动的话本回合就生效。不占行动；占 1 个装备栏，装上不能卸。",
 	},
 	"item_orb": {
 		"name": "活力宝珠", "kind": "equip", "target": "none", "effect": "equip",
-		"stats": {"max_hp": 2, "heal": 2}, "art": "orb",
+		"stats": {"max_hp": 2, "heal": 2}, "art": "orb", "slot_text": "血量上限 +2",
 		"card_text": "装备：血量上限 +2，并回复 2 点",
-		"desc": "给本回合行动的英雄装备：血量上限永久 +2，并立即回复 2 点。占 1 个装备栏，装上不能卸。",
+		"desc": "给选中的己方英雄装备：血量上限永久 +2，并立即回复 2 点。不占行动；占 1 个装备栏，装上不能卸。",
 	},
 	"item_salve": {
 		"name": "治疗药膏", "kind": "equip", "target": "none", "effect": "equip",
 		"stats": {"heal": 3}, "consumable": true, "art": "potion",
 		"card_text": "消耗品：回复 3 点血量",
-		"desc": "消耗品：本回合行动的棋子（英雄或小兵都行）立即回复 3 点血量，不占装备栏。",
+		"desc": "消耗品：选中的己方棋子（英雄或小兵都行）立即回复 3 点血量。不占行动，不占装备栏。",
 	},
 }

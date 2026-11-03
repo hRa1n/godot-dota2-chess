@@ -6,8 +6,9 @@ extends Node2D
 ##       抽到技能卡：对应英雄永久解锁这个技能（加入它的行动卡，不进手牌）
 ##       抽到装备卡：进手牌（上限 8）
 ##   - 每回合只能操作【一个】己方棋子：移动一次（可选）+ 一个行动（可选），顺序不限
-##       行动 = 用该棋子的一张行动卡（基础攻击 / 已解锁的技能，技能有冷却），或从手牌给它用一张装备
+##       行动 = 用该棋子的一张行动卡（基础攻击 / 已解锁的技能，技能有冷却）
 ##   - 一旦移动或行动，本回合就锁定为这个棋子；两样都用完后自动结束回合
+##   - 装备卡不占行动：本回合随时可以给任意己方英雄装备（可以装好几件），不会锁定棋子
 ## 牌库：本方 3 个英雄的技能卡各 1 张 + 每种装备各 2 张；抽空后把弃牌洗回牌库
 ## 装备：只有英雄能装，每个英雄最多 6 件，装上后不能卸下（治疗药膏是消耗品，任何棋子都能用）
 ## 复活：英雄阵亡后，过 2 个己方回合，在己方泉水周围复活（从泉水正上方开始顺时针找空格）
@@ -62,6 +63,7 @@ const LAYOUTS := [
 const OVERLAY_MOVE := Color(0.13, 0.65, 0.3, 0.38)
 const OVERLAY_RANGE := Color(0.95, 0.35, 0.2, 0.14)
 const OVERLAY_TARGET := Color(0.9, 0.12, 0.08, 0.5)
+const OVERLAY_DROP := Color(0.98, 0.8, 0.1, 0.5)
 
 const DIRS := [Vector2i.LEFT, Vector2i.RIGHT, Vector2i.UP, Vector2i.DOWN]
 const DIRS8 := [Vector2i(-1, -1), Vector2i(0, -1), Vector2i(1, -1), Vector2i(-1, 0),
@@ -111,6 +113,8 @@ func _ready() -> void:
 	board.cell_clicked.connect(_on_cell_clicked)
 	hud.card_pressed.connect(_on_card_pressed)
 	hud.hand_card_pressed.connect(_on_hand_card_pressed)
+	hud.hand_card_drag_started.connect(_on_hand_card_drag_started)
+	hud.hand_card_dropped.connect(_on_hand_card_dropped)
 	hud.end_turn_pressed.connect(end_turn)
 	hud.restart_pressed.connect(func(): get_tree().reload_current_scene())
 	_spawn_all()
@@ -120,6 +124,11 @@ func _ready() -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if not (event is InputEventKey and event.pressed and not event.echo):
+		return
+	if hud.draw_overlay.is_playing():       # 抽卡演出中：空格 / 回车 = 继续
+		if event.keycode in [KEY_SPACE, KEY_ENTER, KEY_ESCAPE]:
+			get_viewport().set_input_as_handled()
+			hud.draw_overlay.advance()
 		return
 	match event.keycode:
 		KEY_ESCAPE:
@@ -204,7 +213,9 @@ func _hand_entry(team: int, uid: int) -> Dictionary:
 	return {}
 
 
-func _draw_cards(team: int, n: int) -> void:
+## 抽牌并结算；返回给抽卡演出用的结果 [{info, kind, caption}]
+func _draw_cards(team: int, n: int) -> Array:
+	var results := []
 	var got := []
 	for i in n:
 		if decks[team].is_empty():
@@ -219,16 +230,25 @@ func _draw_cards(team: int, n: int) -> void:
 		var card: Dictionary = PieceDefs.CARDS[id]
 		var card_name: String = card["name"]
 		if card["kind"] == "skill":
-			got.append(_unlock_skill(team, id))
+			var msg := _unlock_skill(team, id)
+			got.append(msg)
+			var unlocked := not msg.ends_with("弃掉）")
+			var hero_name: String = PieceDefs.PIECES[card["owner"]]["name"]
+			results.append({"info": _card_info(id, -1), "kind": "skill" if unlocked else "burn",
+				"caption": ("%s 解锁技能！" % hero_name) if unlocked else "已解锁过 · 弃掉"})
 			continue
 		if hands[team].size() >= HAND_LIMIT:
 			discards[team].append(id)
 			_log("手牌已满，【%s】被弃掉" % card_name)
+			results.append({"info": _card_info(id, -1), "kind": "burn", "caption": "手牌已满 · 弃掉"})
 		else:
 			give_card(team, id)
 			got.append("【%s】" % card_name)
+			results.append({"info": _card_info(id, -1), "kind": "equip",
+				"caption": "消耗品" if card.get("consumable", false) else "获得装备"})
 	if not got.is_empty():
 		_log("%s 抽牌：%s（手牌 %d/%d）" % [TEAM_NAME[team], "、".join(got), hands[team].size(), HAND_LIMIT])
+	return results
 
 
 # ================= 查询 =================
@@ -310,6 +330,9 @@ func piece_can_use(p: Piece, card_id: String) -> bool:
 
 
 func card_usable(p: Piece, card_id: String) -> bool:
+	if PieceDefs.CARDS[card_id]["kind"] == "equip":
+		# 装备不占行动：只要是己方存活棋子、轮到己方就能用
+		return p != null and p.alive and not game_over and p.team == current_team and piece_can_use(p, card_id)
 	return can_control(p) and not has_used_card and p.cooldown_of(card_id) == 0 and piece_can_use(p, card_id)
 
 
@@ -330,8 +353,9 @@ func _start_turn() -> void:
 		return
 	if _capture_tick(current_team):
 		return
-	_draw_cards(current_team, DRAW_PER_TURN)
+	var drawn := _draw_cards(current_team, DRAW_PER_TURN)
 	_select(null)
+	hud.play_draw(drawn, "%s · 第 %d 回合抽牌" % [TEAM_NAME[current_team], round_no], TEAM_COLOR[current_team])
 
 	var can_act := false
 	for p in pieces:
@@ -373,8 +397,9 @@ func _lock_active(p: Piece) -> void:
 
 
 func _after_action() -> void:
-	if active and active.alive and not has_moved and can_control(active):
-		move_cells = reachable_cells(active)
+	var mover: Piece = active if active else selected
+	if mover and mover.alive and not has_moved and can_control(mover) and pending_card == "":
+		move_cells = reachable_cells(mover)
 	_refresh_view()
 	if _check_win():
 		return
@@ -547,6 +572,30 @@ func _on_hand_card_pressed(uid: int) -> void:
 	_begin_card(entry["id"], uid)
 
 
+## 开始拖装备卡：高亮所有能装这张卡的己方棋子
+func _on_hand_card_drag_started(uid: int) -> void:
+	var entry := _hand_entry(current_team, uid)
+	if entry.is_empty() or game_over or busy:
+		return
+	var o := {}
+	for p in pieces:
+		if card_usable(p, entry["id"]):
+			o[p.cell] = OVERLAY_DROP
+	board.set_overlays(o)
+
+
+## 装备卡拖到棋盘上松手：落在能装的己方棋子上就装给它
+func _on_hand_card_dropped(uid: int, _screen_pos: Vector2) -> void:
+	var entry := _hand_entry(current_team, uid)
+	var cell := board.local_to_cell(board.get_local_mouse_position())
+	var p := piece_at(cell) if cell != Board.NO_CELL else null
+	if entry.is_empty() or p == null or not card_usable(p, entry["id"]):
+		_refresh_view()     # 没落在合法棋子上：取消
+		return
+	selected = p
+	_begin_card(entry["id"], uid)
+
+
 func _begin_card(card_id: String, hand_uid: int) -> void:
 	if game_over or busy:
 		return
@@ -649,8 +698,10 @@ func _move(p: Piece, cell: Vector2i) -> void:
 
 func _resolve_card(p: Piece, card_id: String, target_cell: Vector2i, hand_uid := -1) -> void:
 	var card: Dictionary = PieceDefs.CARDS[card_id]
-	_lock_active(p)
-	has_used_card = true
+	var is_equip: bool = card["kind"] == "equip"
+	if not is_equip:        # 装备不占行动，也不锁定棋子
+		_lock_active(p)
+		has_used_card = true
 	pending_card = ""
 	pending_hand_uid = -1
 	target_cells.clear()
@@ -794,13 +845,13 @@ func _resolve_card(p: Piece, card_id: String, target_cell: Vector2i, hand_uid :=
 				_heal(p, card["heal"])
 
 		"equip":
-			_apply_equipment(p, card)
+			_apply_equipment(p, card, card_id)
 
 	p.queue_redraw()
 	_after_action()
 
 
-func _apply_equipment(p: Piece, card: Dictionary) -> void:
+func _apply_equipment(p: Piece, card: Dictionary, card_id: String) -> void:
 	var st: Dictionary = card["stats"]
 	var parts := []
 	if st.has("defense"):
@@ -819,7 +870,7 @@ func _apply_equipment(p: Piece, card: Dictionary) -> void:
 		_heal(p, st["heal"])
 		parts.append("回复 %d" % st["heal"])
 	if not card.get("consumable", false):
-		p.equipment.append(card["name"])
+		p.equipment.append(card_id)
 	_log("  %s %s" % [p.label_name, "，".join(parts)])
 
 
@@ -937,6 +988,8 @@ func _refresh_view() -> void:
 	_refresh_capture()
 
 	hud.set_turn(round_no, TEAM_NAME[current_team], TEAM_COLOR[current_team])
+	var who := "本回合：%s" % (active.label_name if active else "未选择行动棋子")
+	hud.set_ap(not has_moved, not has_used_card, who, TEAM_COLOR[current_team])
 	hud.set_hint(_hint_text())
 	hud.set_info(_info_text(selected))
 
@@ -946,6 +999,7 @@ func _refresh_view() -> void:
 		for id in selected.cards:
 			big.append(_card_info(id, -1))
 	hud.set_cards(big)
+	hud.set_equipment(_equipment_slots(selected))
 
 	# 右侧：本方装备手牌
 	var hand := []
@@ -954,6 +1008,18 @@ func _refresh_view() -> void:
 	hud.set_hand(hand, "%s装备手牌 %d/%d · 牌库 %d · 弃牌 %d" % [
 		TEAM_NAME[current_team], hands[current_team].size(), HAND_LIMIT,
 		decks[current_team].size(), discards[current_team].size()])
+
+
+## 左侧详情的装备栏：英雄 6 格；小兵 / 没选中返回空（不显示）
+func _equipment_slots(p: Piece) -> Dictionary:
+	if p == null or not p.alive or not p.is_hero:
+		return {}
+	var slots := []
+	for id in p.equipment:
+		var c: Dictionary = PieceDefs.CARDS[id]
+		slots.append({"name": c["name"], "art": c.get("art", "sword"),
+			"text": c.get("slot_text", ""), "desc": c["desc"]})
+	return {"title": "装备栏 %d/%d（装上不能卸）" % [p.equipment.size(), MAX_EQUIP], "slots": slots, "max": MAX_EQUIP}
 
 
 func _card_info(id: String, uid: int) -> Dictionary:
@@ -971,6 +1037,8 @@ func _card_info(id: String, uid: int) -> Dictionary:
 		status = "只有英雄能装备"
 	elif card["kind"] == "equip" and not card.get("consumable", false) and p.equipment.size() >= MAX_EQUIP:
 		status = "装备已满 %d/%d" % [MAX_EQUIP, MAX_EQUIP]
+	elif card["kind"] == "equip":
+		status = "可用（不占行动）"
 	elif has_used_card:
 		status = "本回合已行动"
 	elif cd > 0:
@@ -1033,7 +1101,9 @@ func _hint_text() -> String:
 	if not has_moved:
 		parts.append("点绿色格子移动")
 	if not has_used_card:
-		parts.append("用一张行动卡（左侧）或装备（右侧）")
+		parts.append("用一张行动卡（左侧）")
+	if selected.is_hero and not hands[current_team].is_empty():
+		parts.append("右侧装备随时可装（不占行动）")
 	return "，".join(parts) if parts.size() > 0 else "行动完成"
 
 
@@ -1043,11 +1113,8 @@ func _info_text(p: Piece) -> String:
 			fmt(FOUNTAIN_CELLS[0]), fmt(FOUNTAIN_CELLS[1]), FOUNTAIN_HEAL, FOUNTAIN_DAMAGE, DRAW_PER_TURN, fmt(ENERGY_CELL), CAPTURE_TURNS]
 	var role := "英雄" if p.is_hero else ("召唤物" if p.type_id == "illusion" else "士兵")
 	var state := "正常" if p.stun == 0 else "眩晕（剩 %d 回合）" % p.stun
-	var eq := "（只有英雄能装备）"
-	if p.is_hero:
-		eq = "%d/%d  %s" % [p.equipment.size(), MAX_EQUIP, "无" if p.equipment.is_empty() else "、".join(p.equipment)]
-	return "%s（%s）  %s\n血量 %d / %d    防御 %d\n移动速度 %d    攻击加成 +%d\n装备：%s\n状态：%s" % [
-		p.label_name, role, fmt(p.cell), p.hp, p.max_hp, p.defense, p.move, p.atk_bonus, eq, state]
+	return "%s（%s）  %s\n血量 %d / %d    防御 %d\n移动速度 %d    攻击加成 +%d\n状态：%s" % [
+		p.label_name, role, fmt(p.cell), p.hp, p.max_hp, p.defense, p.move, p.atk_bonus, state]
 
 
 func _log(text: String) -> void:

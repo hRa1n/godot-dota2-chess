@@ -5,6 +5,8 @@ extends CanvasLayer
 
 signal card_pressed(card_id: String)
 signal hand_card_pressed(uid: int)
+signal hand_card_drag_started(uid: int)
+signal hand_card_dropped(uid: int, screen_pos: Vector2)
 signal end_turn_pressed
 signal restart_pressed
 
@@ -16,14 +18,23 @@ var info_label: Label
 var capture_label: Label
 var log_label: RichTextLabel
 var cards_flow: HFlowContainer
+var equip_title: Label
+var ap_bar: ApBar
+var draw_overlay: DrawOverlay
+var drag_ghost: TextureRect
+var _drag_info := {}
+var equip_grid: GridContainer
 var hand_root: Control
 var hand_label: Label
 var _hand_cards: Array = []
 ## 两侧栏宽度；卡牌两列排
 const SIDE_W := 318.0
 const CARD_GAP := 10.0
-const CARD_SIZE := Vector2(154, 237)
+const CARD_SIZE := Vector2(154, 237)          # 右侧装备手牌
+const ACTION_CARD_SIZE := Vector2(146, 225)   # 左侧行动卡
+const SLOT_SIZE := Vector2(100, 50)           # 左侧装备栏一格
 const LOG_H := 170.0
+const AP_H := 58.0
 const END_H := 56.0
 var end_btn: Button
 var win_panel: PanelContainer
@@ -46,11 +57,6 @@ func _ready() -> void:
 	root.add_child(left)
 	turn_label = _label(24)
 	left.add_child(turn_label)
-	hint_label = _label(14)
-	hint_label.add_theme_color_override("font_color", Color("#fde68a"))
-	hint_label.autowrap_mode = TextServer.AUTOWRAP_ARBITRARY
-	hint_label.custom_minimum_size = Vector2(SIDE_W, 0)
-	left.add_child(hint_label)
 	var info_panel := _panel()
 	left.add_child(info_panel)
 	info_label = _label(14)
@@ -67,6 +73,26 @@ func _ready() -> void:
 	cards_flow.add_theme_constant_override("v_separation", CARD_GAP)
 	cards_flow.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	left.add_child(cards_flow)
+	equip_title = _label(14)
+	equip_title.add_theme_color_override("font_color", Color("#86efac"))
+	left.add_child(equip_title)
+	equip_grid = GridContainer.new()
+	equip_grid.columns = 3
+	equip_grid.add_theme_constant_override("h_separation", 9)
+	equip_grid.add_theme_constant_override("v_separation", 6)
+	equip_grid.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	left.add_child(equip_grid)
+
+	# 顶部居中第二行：操作提示
+	hint_label = _label(14)
+	hint_label.add_theme_color_override("font_color", Color("#fde68a"))
+	hint_label.anchor_left = 0.5
+	hint_label.anchor_right = 0.5
+	hint_label.offset_left = -300
+	hint_label.offset_right = 300
+	hint_label.offset_top = 36
+	hint_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	root.add_child(hint_label)
 
 	# 顶部居中：能量圈状态
 	capture_label = _label(16)
@@ -133,6 +159,33 @@ func _ready() -> void:
 	end_btn.pressed.connect(end_turn_pressed.emit)
 	root.add_child(end_btn)
 
+	# 正下方：行动点条
+	ap_bar = ApBar.new()
+	ap_bar.anchor_left = 0.5
+	ap_bar.anchor_right = 0.5
+	ap_bar.anchor_top = 1.0
+	ap_bar.anchor_bottom = 1.0
+	ap_bar.offset_left = -250
+	ap_bar.offset_right = 250
+	ap_bar.offset_top = -AP_H - 8
+	ap_bar.offset_bottom = -8
+	ap_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	root.add_child(ap_bar)
+
+	# 拖拽中的装备卡（跟着鼠标走的小图标）
+	drag_ghost = TextureRect.new()
+	drag_ghost.size = Vector2(56, 56)
+	drag_ghost.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	drag_ghost.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+	drag_ghost.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	drag_ghost.visible = false
+	drag_ghost.z_index = 100
+	root.add_child(drag_ghost)
+
+	# 抽卡演出（盖在所有界面上面）
+	draw_overlay = DrawOverlay.new()
+	root.add_child(draw_overlay)
+
 	# 胜利面板
 	win_panel = _panel(Color(0, 0, 0, 0.85))
 	win_panel.set_anchors_preset(Control.PRESET_CENTER)
@@ -191,9 +244,25 @@ func set_cards(cards: Array) -> void:
 		c.queue_free()
 	for c in cards:
 		var v := CardView.new()
-		v.setup(c, CARD_SIZE)
+		v.setup(c, ACTION_CARD_SIZE)
 		v.clicked.connect(func(info): card_pressed.emit(info["id"]))
 		cards_flow.add_child(v)
+
+
+## 左侧装备栏：data = {title, slots: [{name, art, text, desc}], max}；空字典 = 不显示（小兵 / 没选中）
+func set_equipment(data: Dictionary) -> void:
+	for c in equip_grid.get_children():
+		equip_grid.remove_child(c)
+		c.queue_free()
+	equip_title.visible = not data.is_empty()
+	equip_grid.visible = not data.is_empty()
+	if data.is_empty():
+		return
+	equip_title.text = data["title"]
+	for i in data["max"]:
+		var s := EquipSlot.new()
+		s.setup(data["slots"][i] if i < data["slots"].size() else {}, SLOT_SIZE)
+		equip_grid.add_child(s)
 
 
 ## 装备手牌：两列排，放不下时上下叠起来；悬停的那张会上浮并放到最前面
@@ -207,7 +276,10 @@ func set_hand(cards: Array, header: String) -> void:
 		var v := CardView.new()
 		v.setup(c, CARD_SIZE)
 		v.raise_on_hover = true
+		v.draggable = true
 		v.clicked.connect(func(info): hand_card_pressed.emit(info["uid"]))
+		v.drag_started.connect(_on_drag_started)
+		v.drag_released.connect(_on_drag_released)
 		hand_root.add_child(v)
 		_hand_cards.append(v)
 	_layout_hand()
@@ -227,6 +299,37 @@ func _layout_hand() -> void:
 		var v: CardView = _hand_cards[i]
 		v.base_y = (i / 2) * step
 		v.position = Vector2((i % 2) * (CARD_SIZE.x + CARD_GAP), v.base_y)
+
+
+func play_draw(results: Array, title: String, color: Color) -> void:
+	draw_overlay.play(results, title, color)
+
+
+func set_ap(move_left: bool, action_left: bool, who: String, color: Color) -> void:
+	ap_bar.set_state(move_left, action_left, who, color)
+
+
+func _on_drag_started(info: Dictionary) -> void:
+	_drag_info = info
+	drag_ghost.texture = load("res://assets/icons/%s.svg" % info.get("art", "sword"))
+	drag_ghost.visible = true
+	_move_ghost()
+	hand_card_drag_started.emit(info["uid"])
+
+
+func _on_drag_released(info: Dictionary) -> void:
+	drag_ghost.visible = false
+	_drag_info = {}
+	hand_card_dropped.emit(info["uid"], get_viewport().get_mouse_position())
+
+
+func _process(_delta: float) -> void:
+	if drag_ghost.visible:
+		_move_ghost()
+
+
+func _move_ghost() -> void:
+	drag_ghost.position = get_viewport().get_mouse_position() - drag_ghost.size * 0.5
 
 
 func show_winner(text: String, color: Color) -> void:

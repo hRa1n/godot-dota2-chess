@@ -6,6 +6,8 @@ extends Control
 ## 只负责显示和点击，规则在 game.gd。
 
 signal clicked(info: Dictionary)
+signal drag_started(info: Dictionary)
+signal drag_released(info: Dictionary)
 
 const FONT := preload("res://assets/fonts/NotoSansSC-Subset.otf")
 const ART_DIR := "res://assets/icons/"
@@ -17,6 +19,11 @@ const GOLD := Color("#d4af37")
 ## {id, uid, name, kind, type_line, card_text, desc, art, damage, range_text, status, enabled, selecting}
 var info: Dictionary = {}
 var raise_on_hover := false     # 手牌：悬停时上浮
+var draggable := false          # 手牌：可以拖到棋子上
+var face_down := false          # 抽卡动画：背面朝上
+var _press_pos := Vector2.ZERO
+var _pressing := false
+var _dragging := false
 var base_y := 0.0
 var _hover := false
 var _art: Texture2D
@@ -51,10 +58,25 @@ func _notification(what: int) -> void:
 
 
 func _gui_input(event: InputEvent) -> void:
-	if event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		accept_event()
-		if info.get("enabled", false):
-			clicked.emit(info)
+		if event.pressed:
+			_pressing = true
+			_press_pos = event.position
+		else:
+			if _dragging:
+				drag_released.emit(info)
+			elif _pressing and info.get("enabled", false):
+				clicked.emit(info)
+			_pressing = false
+			_dragging = false
+			modulate.a = 1.0
+	elif event is InputEventMouseMotion and _pressing and draggable and not _dragging:
+		# 按住后拖动超过 8 像素才算拖拽，否则还是点击
+		if event.position.distance_to(_press_pos) > 8:
+			_dragging = true
+			modulate.a = 0.45
+			drag_started.emit(info)
 
 
 func _draw() -> void:
@@ -63,6 +85,9 @@ func _draw() -> void:
 	var ci := get_canvas_item()
 	var w := size.x
 	var h := size.y
+	if face_down:
+		_draw_back(ci, w, h)
+		return
 	var k := w / BASE_W            # 所有尺寸按基准卡（170 宽）等比放大，字体同步放大保持清晰
 	var base: Color = {"attack": Color("#7a4510"), "skill": Color("#1e3a8a"), "equip": Color("#14532d")}[info["kind"]]
 
@@ -117,6 +142,27 @@ func _draw() -> void:
 		var pill := Rect2(w * 0.5 - tw * 0.5, h - 27 * k, tw, 19 * k)
 		_sb(Color(0, 0, 0, 0.8), int(9 * k)).draw(ci, pill)
 		_text(st, pill.get_center(), sfs, Color("#fde68a"))
+
+
+## 卡背：深蓝底、金框、菱形花纹、中间徽记
+func _draw_back(ci: RID, w: float, h: float) -> void:
+	var k := w / BASE_W
+	_sb(GOLD, int(14 * k)).draw(ci, Rect2(0, 0, w, h))
+	_sb(Color("#172554"), int(11 * k), int(2 * k), Color("#1e40af")).draw(ci, Rect2(5 * k, 5 * k, w - 10 * k, h - 10 * k))
+	var step := 22.0 * k
+	var y := 14.0 * k
+	while y < h - 10 * k:
+		var x := 14.0 * k + (step * 0.5 if int(y / step) % 2 == 1 else 0.0)
+		while x < w - 12 * k:
+			var c := Vector2(x, y)
+			draw_colored_polygon(PackedVector2Array([c + Vector2(0, -4 * k), c + Vector2(4 * k, 0), c + Vector2(0, 4 * k), c + Vector2(-4 * k, 0)]), Color(0.83, 0.69, 0.22, 0.18))
+			x += step
+		y += step * 0.5
+	var c0 := Vector2(w, h) * 0.5
+	draw_circle(c0, 46 * k, GOLD)
+	draw_circle(c0, 41 * k, Color("#0f172a"))
+	draw_arc(c0, 33 * k, 0, TAU, 48, Color(0.83, 0.69, 0.22, 0.6), 2.0 * k)
+	_text("棋", c0, int(40 * k), GOLD.lightened(0.2), true)
 
 
 func _gem(c: Vector2, r: float, col: Color, t: String, fs: int) -> void:
