@@ -21,6 +21,7 @@ var cards_flow: HFlowContainer
 var equip_title: Label
 var ap_bar: ApBar
 var draw_overlay: DrawOverlay
+var flash_rect: ColorRect
 var drag_ghost: TextureRect
 var _drag_info := {}
 var equip_grid: GridContainer
@@ -182,6 +183,13 @@ func _ready() -> void:
 	drag_ghost.z_index = 100
 	root.add_child(drag_ghost)
 
+	# 全屏闪光（天罚等大招）
+	flash_rect = ColorRect.new()
+	flash_rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+	flash_rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	flash_rect.color = Color(1, 1, 1, 0)
+	root.add_child(flash_rect)
+
 	# 抽卡演出（盖在所有界面上面）
 	draw_overlay = DrawOverlay.new()
 	root.add_child(draw_overlay)
@@ -299,6 +307,11 @@ func _layout_hand() -> void:
 		var v: CardView = _hand_cards[i]
 		v.base_y = (i / 2) * step
 		v.position = Vector2((i % 2) * (CARD_SIZE.x + CARD_GAP), v.base_y)
+
+
+func flash(color: Color, strength := 0.55) -> void:
+	flash_rect.color = Color(color.r, color.g, color.b, strength)
+	create_tween().tween_property(flash_rect, "color:a", 0.0, 0.45)
 
 
 func play_draw(results: Array, title: String, color: Color) -> void:

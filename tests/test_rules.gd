@@ -36,6 +36,7 @@ func new_game() -> void:
 		game.queue_free()
 		await process_frame
 	game = load("res://scenes/main.tscn").instantiate()
+	game.fx_enabled = false     # 不播特效、不等待，结算立即完成
 	root.add_child(game)
 	await process_frame
 	await process_frame
@@ -69,6 +70,16 @@ func _initialize() -> void:
 
 func _run() -> void:
 	await new_game()
+
+	print("[特效与音效]")
+	var all_sfx_ok := true
+	for snd in ["hit", "hurt", "zap", "thunder", "ice", "blizzard", "spin", "magic", "warp", "heal", "roar", "cull", "hook", "rot", "dismember", "step", "card", "flip", "unlock", "equip", "death", "turn", "respawn", "victory"]:
+		all_sfx_ok = all_sfx_ok and ResourceLoader.exists("res://assets/sfx/%s.wav" % snd)
+	check(all_sfx_ok, "24 个音效文件都在")
+	var v := Vfx.make("bolt", Vector2.ZERO, Vector2(100, 0), Color.WHITE, 40.0, 0.05)
+	root.add_child(v)
+	await wait(0.2)
+	check(not is_instance_valid(v), "特效播完自动删除")
 
 	print("[布置与属性]")
 	check(Board.COLS == 11 and Board.ROWS == 11, "地图 11x11")

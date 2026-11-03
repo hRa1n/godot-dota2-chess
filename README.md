@@ -92,6 +92,7 @@
 | 结束回合 | 空格 |
 | 装备 | 点右侧装备卡，或拖到己方英雄身上 |
 | 抽卡演出继续 | 点击 / 空格 |
+| 静音开关 | M |
 
 ## 目录
 
@@ -107,6 +108,9 @@ scripts/card_view.gd          卡牌（炉石风格的卡面绘制）
 scripts/camera_controller.gd  摄像机
 scripts/float_text.gd         伤害/治疗飘字
 scripts/background.gd         战场背景（天辉 / 夜魇两套，回合切换时淡入淡出）
+scripts/vfx.gd                技能特效（闪电、冰环、旋风、钩链、飞弹等，全部代码绘制）
+scripts/sfx.gd                音效播放器（M 键静音）
+assets/sfx/                   音效（由 tools/gen_sfx.py 程序合成，可重新生成）
 tests/test_rules.gd           规则自动测试
 assets/fonts/                 思源黑体（Noto Sans SC）常用字子集，SIL OFL 1.1 授权
 资源/dota2-minimap-hero-sprites/  Dota 2 小地图英雄像素头像（32×32），索引见 heroes.csv
@@ -122,6 +126,10 @@ export_presets.cfg            网页导出配置（单线程，无需特殊响�
 godot --headless --import
 godot --headless -s res://tests/test_rules.gd
 ```
+
+## 特效预览
+
+试玩链接后面加 `#fxdemo`（（试玩链接）#fxdemo ）会进入特效预览：循环播放每张卡的施法特效。
 
 ## 网页试玩
 

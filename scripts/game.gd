@@ -73,6 +73,9 @@ const DIRS8 := [Vector2i(-1, -1), Vector2i(0, -1), Vector2i(1, -1), Vector2i(-1,
 @onready var pieces_root: Node2D = $Pieces
 @onready var fx_root: Node2D = $FX
 @onready var hud: Hud = $HUD
+@onready var sfx: Sfx = $Sfx
+## 关掉后不播特效、不等待（自动测试用，让结算立即完成）
+var fx_enabled := true
 @onready var backgrounds: Array[Control] = [$BackgroundLayer/RadiantBG, $BackgroundLayer/DireBG]
 var _bg_tween: Tween
 
@@ -117,8 +120,12 @@ func _ready() -> void:
 	hud.hand_card_dropped.connect(_on_hand_card_dropped)
 	hud.end_turn_pressed.connect(end_turn)
 	hud.restart_pressed.connect(func(): get_tree().reload_current_scene())
+	hud.draw_overlay.sfx = sfx
 	_spawn_all()
 	_build_decks()
+	if _url_hash() == "#fxdemo":     # 特效预览：网址末尾加 #fxdemo
+		_fx_demo()
+		return
 	_start_turn()
 
 
@@ -139,6 +146,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		KEY_SPACE:      # 空格：结束回合
 			get_viewport().set_input_as_handled()
 			end_turn()
+		KEY_M:          # M：静音开关
+			_log("音效：%s" % ("关" if sfx.toggle_mute() else "开"))
 
 
 # ================= 布置 =================
@@ -347,6 +356,7 @@ func _start_turn() -> void:
 	_log("[b]—— 第 %d 回合 · [color=%s]%s[/color] ——[/b]" % [
 		round_no, TEAM_COLOR[current_team].to_html(false), TEAM_NAME[current_team]])
 	_switch_background(current_team)
+	_snd("turn")
 	_respawn_tick(current_team)
 	_fountain_tick(current_team)
 	if _check_win():
@@ -432,6 +442,8 @@ func _respawn_tick(team: int) -> void:
 			_log("%s 泉水周围没有空位，下回合再复活" % p.label_name)
 			continue
 		p.revive(c, board.cell_center(c))
+		_fx("ring", p.position, p.position, TEAM_COLOR[team].lightened(0.3), 1.0, 0.6)
+		_snd("respawn")
 		_log("[color=#93c5fd]%s 在 %s 复活[/color]" % [p.label_name, fmt(c)])
 
 
@@ -478,6 +490,8 @@ func _fountain_tick(team: int) -> void:
 	if not enemies_in_range.is_empty():
 		var victim: Piece = enemies_in_range.pick_random()
 		_log("泉水攻击 %s" % victim.label_name)
+		_fx("beam", board.cell_center(f), victim.position, TEAM_COLOR[team].lightened(0.4), 0.0, 0.35)
+		_snd("zap")
 		_damage(victim, FOUNTAIN_DAMAGE)
 
 
@@ -686,6 +700,7 @@ func _move(p: Piece, cell: Vector2i) -> void:
 	has_moved = true
 	move_cells.clear()
 	_log("%s 移动到 %s" % [p.label_name, fmt(cell)])
+	_snd("step")
 	p.cell = cell
 	busy = true
 	_refresh_view()
@@ -719,6 +734,7 @@ func _resolve_card(p: Piece, card_id: String, target_cell: Vector2i, hand_uid :=
 	var target := piece_at(target_cell)
 	var physical: bool = card.get("damage_type", "magic") == "physical"
 	_log("%s 使用【%s】" % [p.label_name, card["name"]])
+	await _cast_fx(card_id, p, target)
 
 	match card["effect"]:
 		"damage":
@@ -744,6 +760,9 @@ func _resolve_card(p: Piece, card_id: String, target_cell: Vector2i, hand_uid :=
 				if next == null:
 					break
 				hit.append(next)
+				_fx("bolt", last.position, next.position, Color("#7dd3fc"), 0.0, 0.3)
+				_snd("zap")
+				await _wait(0.1)
 				_damage(next, card["jump_damage"], physical)
 				last = next
 
@@ -776,7 +795,10 @@ func _resolve_card(p: Piece, card_id: String, target_cell: Vector2i, hand_uid :=
 			_stun(target, randi_range(card["stun_min"], card["stun_max"]))
 
 		"rift":
-			await _teleport(p, _free_cell_next_to(target, p))
+			var rift_dest := _free_cell_next_to(target, p)
+			_fx("portal", p.position, p.position, Color("#a855f7"), 0.5, 0.45)
+			_fx("portal", board.cell_center(rift_dest), board.cell_center(rift_dest), Color("#a855f7"), 0.5, 0.45)
+			await _teleport(p, rift_dest)
 			_damage(target, card["damage"], physical)
 
 		"omnislash":
@@ -788,7 +810,11 @@ func _resolve_card(p: Piece, card_id: String, target_cell: Vector2i, hand_uid :=
 						near.append(e)
 				if near.is_empty():
 					break
-				_damage(near.pick_random(), card["damage"], physical)
+				var victim: Piece = near.pick_random()
+				_fx("slash", victim.position, victim.position, Color("#fb923c"), 0.45, 0.25)
+				_snd("hit")
+				_damage(victim, card["damage"], physical)
+				await _wait(0.13)
 
 		"summon":
 			var made := 0
@@ -798,6 +824,7 @@ func _resolve_card(p: Piece, card_id: String, target_cell: Vector2i, hand_uid :=
 				var c: Vector2i = p.cell + d
 				if is_blocked(c):
 					continue
+				_fx("cloud", board.cell_center(c), board.cell_center(c), Color("#a855f7"), 0.6, 0.5)
 				var s := _spawn(card["summon"], p.team, c)
 				s.modulate.a = 0.0
 				create_tween().tween_property(s, "modulate:a", 1.0, 0.3)
@@ -851,6 +878,150 @@ func _resolve_card(p: Piece, card_id: String, target_cell: Vector2i, hand_uid :=
 	_after_action()
 
 
+# ================= 特效 / 音效 =================
+
+func _url_hash() -> String:
+	if OS.has_feature("web"):
+		return str(JavaScriptBridge.eval("window.location.hash", true))
+	return ""
+
+
+## 特效预览页：每张卡的施法特效轮流在棋盘中间循环播放
+func _fx_demo() -> void:
+	for p in pieces:
+		p.hide()
+		p.alive = false
+	var caster := _spawn("zeus", 0, Vector2i(5, 8))
+	var dummy := _spawn("soldier", 1, Vector2i(5, 3))
+	var dummy2 := _spawn("soldier", 1, Vector2i(6, 4))
+	var ids := ["basic_attack"]
+	for hero in PieceDefs.HERO_SKILLS:
+		ids.append_array(PieceDefs.HERO_SKILLS[hero])
+	ids.append("item_mail")
+	hud.set_hint("特效预览（#fxdemo）：循环播放每张卡的施法特效")
+	while true:
+		for id in ids:
+			dummy.hp = dummy.max_hp
+			dummy2.hp = dummy2.max_hp
+			hud.set_capture("【%s】" % PieceDefs.CARDS[id]["name"], Color("#fde68a"))
+			await _cast_fx(id, caster, dummy)
+			await get_tree().create_timer(1.0).timeout
+
+func _snd(name: String) -> void:
+	sfx.play(name)
+
+
+## 在棋盘上放一个特效；半径以格子为单位
+func _fx(kind: String, from: Vector2, to: Vector2, color: Color, radius_cells := 0.8, duration := 0.4) -> void:
+	if not fx_enabled:
+		return
+	fx_root.add_child(Vfx.make(kind, from, to, color, radius_cells * board.cell_size, duration))
+
+
+## 等特效播到命中的那一刻（测试时 fx_enabled = false，不等待）
+func _wait(sec: float) -> void:
+	if not fx_enabled:
+		return
+	busy = true
+	await get_tree().create_timer(sec).timeout
+	busy = false
+
+
+static func _sky(pos: Vector2) -> Vector2:
+	return pos + Vector2(randf_range(-30, 30), -360)
+
+
+## 每张卡的施法表现：播特效 + 音效，并等到“命中”再结算伤害
+func _cast_fx(card_id: String, p: Piece, target: Piece) -> void:
+	var at: Vector2 = target.position if target else p.position
+	match card_id:
+		"basic_attack", "illusion_attack":
+			_fx("slash", at, at, Color("#e5e7eb"), 0.6, 0.3)
+			_snd("hit")
+			await _wait(0.12)
+		"zeus_chain":
+			_fx("bolt", p.position, at, Color("#7dd3fc"), 0.0, 0.35)
+			_snd("zap")
+			await _wait(0.12)
+		"zeus_bolt":
+			_fx("bolt", _sky(at), at, Color("#93c5fd"), 0.0, 0.45)
+			_fx("burst", at, at, Color("#bfdbfe"), 0.9, 0.35)
+			_snd("thunder")
+			await _wait(0.15)
+		"zeus_wrath":
+			hud.flash(Color("#dbeafe"))
+			for e in enemies_of(p):
+				_fx("bolt", _sky(e.position), e.position, Color("#93c5fd"), 0.0, 0.5)
+			_snd("thunder")
+			await _wait(0.25)
+		"cm_nova":
+			_fx("ring", at, at, Color("#7dd3fc"), 1.6, 0.45)
+			_fx("snow", at, at, Color("#bae6fd"), 1.5, 0.6)
+			_snd("ice")
+			await _wait(0.18)
+		"cm_frostbite":
+			_fx("orb", p.position, at, Color("#7dd3fc"), 0.0, 0.25)
+			_snd("ice")
+			await _wait(0.25)
+			_fx("ring", at, at, Color("#e0f2fe"), 0.6, 0.35)
+		"cm_field":
+			_fx("snow", p.position, p.position, Color("#bae6fd"), 3.5, 0.9)
+			_fx("ring", p.position, p.position, Color("#7dd3fc"), 3.5, 0.6)
+			_snd("blizzard")
+			await _wait(0.3)
+		"jugg_fury":
+			_fx("spin", p.position, p.position, Color("#fb923c"), 1.2, 0.6)
+			_snd("spin")
+			await _wait(0.2)
+		"jugg_ward":
+			_fx("ring", p.position, p.position, Color("#4ade80"), 2.5, 0.6)
+			_snd("heal")
+			await _wait(0.15)
+		"jugg_omni":
+			_fx("burst", p.position, p.position, Color("#fb923c"), 0.8, 0.3)
+			_snd("warp")
+			await _wait(0.1)
+		"ck_bolt":
+			_fx("orb", p.position, at, Color("#a855f7"), 0.0, 0.3)
+			_snd("magic")
+			await _wait(0.3)
+			_fx("burst", at, at, Color("#c084fc"), 0.8, 0.35)
+		"ck_rift":
+			_snd("warp")
+		"ck_phantasm":
+			_snd("warp")
+		"axe_call":
+			_fx("ring", p.position, p.position, Color("#ef4444"), 1.6, 0.45)
+			_fx("ring", p.position, p.position, Color("#fca5a5"), 1.1, 0.35)
+			_snd("roar")
+			await _wait(0.15)
+		"axe_helix":
+			_fx("spin", p.position, p.position, Color("#ef4444"), 1.2, 0.5)
+			_snd("spin")
+			await _wait(0.18)
+		"axe_cull":
+			_fx("x", at, at, Color("#dc2626"), 0.5, 0.5)
+			_snd("cull")
+			await _wait(0.15)
+		"pudge_hook":
+			_fx("chain", p.position, at, Color.WHITE, 0.0, 0.5)
+			_snd("hook")
+			await _wait(0.25)
+		"pudge_rot":
+			_fx("cloud", p.position, p.position, Color("#65a30d"), 1.6, 0.7)
+			_snd("rot")
+			await _wait(0.2)
+		"pudge_dismember":
+			_fx("burst", at, at, Color("#dc2626"), 0.9, 0.5)
+			_fx("cloud", at, at, Color("#991b1b"), 0.7, 0.5)
+			_snd("dismember")
+			await _wait(0.18)
+		_:
+			if PieceDefs.CARDS[card_id]["kind"] == "equip":
+				_fx("rise", p.position, p.position, Color("#fcd34d"), 0.8, 0.6)
+				_snd("equip")
+
+
 func _apply_equipment(p: Piece, card: Dictionary, card_id: String) -> void:
 	var st: Dictionary = card["stats"]
 	var parts := []
@@ -879,6 +1050,7 @@ func _stun(target: Piece, turns: int) -> void:
 		return
 	target.stun = maxi(target.stun, turns)
 	target.queue_redraw()
+	_fx("ring", target.position, target.position, Color("#facc15"), 0.5, 0.35)
 	_log("  %s 被眩晕 %d 回合" % [target.label_name, turns])
 
 
@@ -919,10 +1091,13 @@ func _damage(target: Piece, amount: int, physical := false) -> void:
 		amount = maxi(1, amount - target.defense)
 	target.hp = maxi(0, target.hp - amount)
 	target.flash()
+	_snd("hurt")
 	target.queue_redraw()
 	_float(target.position, "-%d" % amount, Color("#ff5a4f"))
 	_log("  %s 受到 %d 点伤害（剩余 %d）" % [target.label_name, amount, target.hp])
 	if target.hp == 0:
+		_fx("burst", target.position, target.position, Color("#d1d5db"), 0.8, 0.5)
+		_snd("death")
 		target.die()
 		_log("  [color=#f87171]%s 阵亡[/color]" % target.label_name)
 		if target.is_hero:
@@ -941,6 +1116,8 @@ func _heal(target: Piece, amount: int) -> void:
 	target.hp += real
 	target.queue_redraw()
 	_float(target.position, "+%d" % real, Color("#4ade80"))
+	_fx("rise", target.position, target.position, Color("#4ade80"), 0.7, 0.6)
+	_snd("heal")
 
 
 func _float(pos: Vector2, text: String, color: Color) -> void:
@@ -968,6 +1145,7 @@ func _check_win() -> bool:
 
 func _declare_win(winner: int, reason: String) -> void:
 	game_over = true
+	_snd("victory")
 	_log("[b]%s 获胜！（%s）[/b]" % [TEAM_NAME[winner], reason])
 	_refresh_view()
 	hud.show_winner("%s 获胜！\n%s" % [TEAM_NAME[winner], reason], TEAM_COLOR[winner])

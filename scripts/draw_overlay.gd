@@ -24,6 +24,7 @@ var _angle := 0.0
 var _title := ""
 var _title_color := Color.WHITE
 var _hint_alpha := 0.0
+var sfx: Sfx = null      # 由 game.gd 传进来
 
 
 func _ready() -> void:
@@ -44,17 +45,15 @@ func play(results: Array, title: String, color: Color) -> void:
 	_title = title
 	_title_color = color
 	_hint_alpha = 0.0
-	# 第一回合时界面可能还没布局好，直接用视口大小
-	position = Vector2.ZERO
-	size = get_viewport_rect().size
 	visible = true
 	modulate.a = 0.0
 	create_tween().tween_property(self, "modulate:a", 1.0, 0.2)
 
 	var n := results.size()
 	var spacing := CARD.x + 70
-	var center := size * 0.5
-	var deck := Vector2(center.x - CARD.x * 0.5, size.y + 40)
+	var vs := _area()
+	var center := vs * 0.5
+	var deck := Vector2(center.x - CARD.x * 0.5, vs.y + 40)
 	for i in n:
 		var r: Dictionary = results[i]
 		var v := CardView.new()
@@ -76,6 +75,7 @@ func play(results: Array, title: String, color: Color) -> void:
 	_tween = create_tween()
 	# 发牌：依次飞到中间
 	for e in _entries:
+		_tween.tween_callback(_snd.bind("card"))
 		_tween.tween_property(e["view"], "position", e["target"], 0.38).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 		_tween.parallel().tween_property(e["view"], "rotation", 0.0, 0.38)
 		_tween.tween_interval(0.08)
@@ -113,10 +113,17 @@ func _reveal(i: int) -> void:
 	if e["revealed"]:
 		return
 	e["revealed"] = true
+	_snd("flip")
+	_snd({"skill": "unlock", "equip": "equip"}.get(e["kind"], ""))
 	var v: CardView = e["view"]
 	v.face_down = false
 	v.scale.x = maxf(v.scale.x, 0.01)
 	v.queue_redraw()
+
+
+func _snd(name: String) -> void:
+	if sfx:
+		sfx.play(name)
 
 
 func _on_all_revealed() -> void:
@@ -130,13 +137,14 @@ func _leave() -> void:
 	for e in _entries:
 		var v: CardView = e["view"]
 		var dest: Vector2
+		var vs := _area()
 		match e["kind"]:
 			"skill":
-				dest = Vector2(60, size.y * 0.55)                  # 左侧：英雄行动卡
+				dest = Vector2(60, vs.y * 0.55)                    # 左侧：英雄行动卡
 			"equip":
-				dest = Vector2(size.x - CARD.x * 0.6, 60)          # 右侧：装备手牌
+				dest = Vector2(vs.x - CARD.x * 0.6, 60)            # 右侧：装备手牌
 			_:
-				dest = Vector2(v.position.x, size.y + 60)          # 弃掉：往下掉
+				dest = Vector2(v.position.x, vs.y + 60)            # 弃掉：往下掉
 		tw.tween_property(v, "position", dest, 0.4).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
 		tw.tween_property(v, "scale", Vector2(0.3, 0.3), 0.4)
 		tw.tween_property(v, "modulate:a", 0.0, 0.4).set_delay(0.15)
@@ -168,12 +176,18 @@ func _process(delta: float) -> void:
 		queue_redraw()
 
 
+## 第一回合时界面可能还没布局好，统一用视口大小
+func _area() -> Vector2:
+	return get_viewport_rect().size
+
+
 func _draw() -> void:
+	var vs := _area()
 	# 背景压暗
-	draw_rect(Rect2(Vector2.ZERO, size), Color(0.01, 0.02, 0.05, 0.78))
+	draw_rect(Rect2(Vector2.ZERO, vs), Color(0.01, 0.02, 0.05, 0.78))
 
 	# 标题
-	_center_text(_title, Vector2(size.x * 0.5, size.y * 0.5 - CARD.y * 0.5 - 70), 34, _title_color.lightened(0.4))
+	_center_text(_title, Vector2(vs.x * 0.5, vs.y * 0.5 - CARD.y * 0.5 - 70), 34, _title_color.lightened(0.4))
 
 	# 翻开的卡背后：旋转光芒 + 光晕
 	for e in _entries:
@@ -196,7 +210,7 @@ func _draw() -> void:
 	# 继续提示
 	if _hint_alpha > 0.0:
 		var a := _hint_alpha * (0.6 + 0.4 * sin(_angle * 8.0))
-		_center_text("点击任意处 / 空格 继续", Vector2(size.x * 0.5, size.y - 60), 18, Color(1, 1, 1, a))
+		_center_text("点击任意处 / 空格 继续", Vector2(vs.x * 0.5, vs.y - 60), 18, Color(1, 1, 1, a))
 
 
 func _center_text(t: String, c: Vector2, fs: int, col: Color) -> void:
