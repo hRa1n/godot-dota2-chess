@@ -1,0 +1,19 @@
+[remap]
+
+importer="csv_translation"
+type="Translation"
+uid="uid://dxrjcufdvrjjp"
+
+[deps]
+
+files=["res://资源/dota2-minimap-hero-sprites/heroes.name.translation", "res://资源/dota2-minimap-hero-sprites/heroes.type.translation", "res://资源/dota2-minimap-hero-sprites/heroes.sheet.translation", "res://资源/dota2-minimap-hero-sprites/heroes.sheet.translation", "res://资源/dota2-minimap-hero-sprites/heroes.file.translation"]
+
+source_file="res://资源/dota2-minimap-hero-sprites/heroes.csv"
+dest_files=["res://资源/dota2-minimap-hero-sprites/heroes.name.translation", "res://资源/dota2-minimap-hero-sprites/heroes.type.translation", "res://资源/dota2-minimap-hero-sprites/heroes.sheet.translation", "res://资源/dota2-minimap-hero-sprites/heroes.sheet.translation", "res://资源/dota2-minimap-hero-sprites/heroes.file.translation"]
+
+[params]
+
+compress=1
+delimiter=0
+unescape_keys=false
+unescape_translations=true

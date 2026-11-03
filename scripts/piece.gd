@@ -37,8 +37,9 @@ var highlight := false      # 本回合正在行动
 var cell_size := 48
 var _icon: Texture2D
 
-## 头像替换：把图片放到 assets/portraits/ 下即可覆盖默认图标（像素图会自动用清晰的最近邻缩放）
-##   zeus.png / chaos_knight.png / soldier_radiant.png / soldier_dire.png
+## 头像替换：把图片放到 assets/portraits/<棋子类型>.png 即可覆盖默认图标（像素图自动用最近邻缩放保持清晰）
+##   例：zeus.png / crystal_maiden.png / juggernaut.png / chaos_knight.png / axe.png / pudge.png
+##       soldier_radiant.png / soldier_dire.png
 const PORTRAIT_DIR := "res://assets/portraits/"
 
 
@@ -58,7 +59,7 @@ func setup(p_type: String, p_team: int, p_color: Color, p_label: String, p_cell_
 	z_index = 1
 	var icon_path = ICONS[type_id]
 	_icon = load(icon_path[team] if icon_path is Array else icon_path)
-	var file := type_id
+	var file: String = {"illusion": "chaos_knight"}.get(type_id, type_id)     # 幻象用混沌骑士的头像
 	if type_id == "soldier":
 		file = "soldier_radiant" if team == 0 else "soldier_dire"
 	var path := PORTRAIT_DIR + file + ".png"
