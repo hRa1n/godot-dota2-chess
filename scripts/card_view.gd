@@ -12,7 +12,9 @@ const ART := {
 	"zeus": preload("res://assets/icons/zeus.svg"),
 	"knight": preload("res://assets/icons/knight.svg"),
 }
-const CARD_SIZE := Vector2(170, 262)
+## 基准卡尺寸 170x262，实际显示放大到 CARD_SIZE
+const BASE_W := 170.0
+const CARD_SIZE := Vector2(232, 358)
 const GOLD := Color("#d4af37")
 
 ## {id, name, kind, card_text, desc, art, damage, range_text, cooldown_total, status, enabled, selecting}
@@ -53,58 +55,60 @@ func _draw() -> void:
 	var ci := get_canvas_item()
 	var w := size.x
 	var h := size.y
+	var k := w / BASE_W            # 所有尺寸按基准卡（170 宽）等比放大，字体同步放大保持清晰
 	var attack: bool = info["kind"] == "attack"
 	var base := Color("#7a4510") if attack else Color("#1e3a8a")
 
 	# 选中 / 悬停光晕
 	if info["selecting"]:
-		_sb(Color(0.98, 0.8, 0.1, 0.6), 18).draw(ci, Rect2(-6, -6, w + 12, h + 12))
+		_sb(Color(0.98, 0.8, 0.1, 0.6), int(18 * k)).draw(ci, Rect2(-6 * k, -6 * k, w + 12 * k, h + 12 * k))
 	elif _hover and info["enabled"]:
-		_sb(Color(1, 1, 1, 0.28), 17).draw(ci, Rect2(-4, -4, w + 8, h + 8))
+		_sb(Color(1, 1, 1, 0.28), int(17 * k)).draw(ci, Rect2(-4 * k, -4 * k, w + 8 * k, h + 8 * k))
 
 	# 边框 + 卡身
-	_sb(GOLD, 14).draw(ci, Rect2(0, 0, w, h))
-	_sb(base, 11, 1, base.lightened(0.35)).draw(ci, Rect2(4, 4, w - 8, h - 8))
+	_sb(GOLD, int(14 * k)).draw(ci, Rect2(0, 0, w, h))
+	_sb(base, int(11 * k), 1, base.lightened(0.35)).draw(ci, Rect2(4 * k, 4 * k, w - 8 * k, h - 8 * k))
 
 	# 插画（椭圆窗）
-	var art := Rect2(16, 28, w - 32, 92)
-	_sb(base.darkened(0.6), 46, 3, GOLD).draw(ci, art)
+	var art := Rect2(14 * k, 26 * k, w - 28 * k, 96 * k)
+	_sb(base.darkened(0.6), int(48 * k), int(3 * k), GOLD).draw(ci, art)
 	var tex: Texture2D = ART.get(info.get("art", "sword"), ART["sword"])
-	var s := 80.0
+	var s := 86.0 * k
 	draw_texture_rect(tex, Rect2(art.get_center() - Vector2(s, s) * 0.5, Vector2(s, s)), false)
 
 	# 名字横幅
-	var banner := Rect2(8, 110, w - 16, 28)
-	_sb(base.darkened(0.35), 6, 2, GOLD).draw(ci, banner)
-	_text(info["name"], banner.get_center(), 17, Color.WHITE, true)
+	var banner := Rect2(8 * k, 110 * k, w - 16 * k, 28 * k)
+	_sb(base.darkened(0.35), int(6 * k), int(2 * k), GOLD).draw(ci, banner)
+	_text(info["name"], banner.get_center(), int(17 * k), Color.WHITE, true)
 
 	# 类型
-	_text("攻击卡" if attack else "技能卡", Vector2(w * 0.5, 150), 12, GOLD.lightened(0.25))
+	_text("攻击卡" if attack else "技能卡", Vector2(w * 0.5, 150 * k), int(12 * k), GOLD.lightened(0.25))
 
 	# 描述框
-	var box := Rect2(12, 160, w - 24, 66)
-	_sb(Color("#f3e9d2"), 6).draw(ci, box)
-	draw_multiline_string(FONT, Vector2(box.position.x + 6, box.position.y + 19), info["card_text"],
-		HORIZONTAL_ALIGNMENT_CENTER, box.size.x - 12, 13, 3, Color("#3b2a14"))
+	var box := Rect2(12 * k, 160 * k, w - 24 * k, 66 * k)
+	_sb(Color("#f3e9d2"), int(6 * k)).draw(ci, box)
+	draw_multiline_string(FONT, Vector2(box.position.x + 6 * k, box.position.y + 19 * k), info["card_text"],
+		HORIZONTAL_ALIGNMENT_CENTER, box.size.x - 12 * k, int(13 * k), 3, Color("#3b2a14"))
 
 	# 宝石
-	_gem(Vector2(18, 18), 14, Color("#2563eb"), str(info["cooldown_total"]), 15)
-	_gem(Vector2(20, h - 18), 17, Color("#d97706"), str(info["damage"]), 17)
-	_gem(Vector2(w - 20, h - 18), 17, Color("#0e7490"), info["range_text"], 11)
+	_gem(Vector2(18, 18) * k, 14 * k, Color("#2563eb"), str(info["cooldown_total"]), int(15 * k))
+	_gem(Vector2(20 * k, h - 18 * k), 17 * k, Color("#d97706"), str(info["damage"]), int(17 * k))
+	_gem(Vector2(w - 20 * k, h - 18 * k), 17 * k, Color("#0e7490"), info["range_text"], int(11 * k))
 
 	# 状态（冷却中 / 已出牌 …）
 	if info["status"] != "可用":
 		var st: String = info["status"]
-		var tw := FONT.get_string_size(st, HORIZONTAL_ALIGNMENT_LEFT, -1, 11).x + 14
-		var pill := Rect2(w * 0.5 - tw * 0.5, h - 27, tw, 19)
-		_sb(Color(0, 0, 0, 0.8), 9).draw(ci, pill)
-		_text(st, pill.get_center(), 11, Color("#fde68a"))
+		var fs := int(11 * k)
+		var tw := FONT.get_string_size(st, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x + 14 * k
+		var pill := Rect2(w * 0.5 - tw * 0.5, h - 27 * k, tw, 19 * k)
+		_sb(Color(0, 0, 0, 0.8), int(9 * k)).draw(ci, pill)
+		_text(st, pill.get_center(), fs, Color("#fde68a"))
 
 
 func _gem(c: Vector2, r: float, col: Color, t: String, fs: int) -> void:
-	draw_circle(c, r + 2.5, GOLD)
+	draw_circle(c, r * 1.15, GOLD)
 	draw_circle(c, r, col)
-	draw_arc(c, r - 3, deg_to_rad(200), deg_to_rad(290), 12, Color(1, 1, 1, 0.45), 2.0)
+	draw_arc(c, r * 0.8, deg_to_rad(200), deg_to_rad(290), 12, Color(1, 1, 1, 0.45), r * 0.12)
 	_text(t, c, fs, Color.WHITE, true)
 
 
@@ -112,7 +116,7 @@ func _text(t: String, center: Vector2, fs: int, col: Color, outline := false) ->
 	var tw := FONT.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
 	var pos := Vector2(center.x - tw * 0.5, center.y + (FONT.get_ascent(fs) - FONT.get_descent(fs)) * 0.5)
 	if outline:
-		draw_string_outline(FONT, pos, t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 4, Color(0, 0, 0, 0.75))
+		draw_string_outline(FONT, pos, t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, maxi(4, fs / 4), Color(0, 0, 0, 0.75))
 	draw_string(FONT, pos, t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
 
 

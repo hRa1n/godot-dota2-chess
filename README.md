@@ -22,7 +22,7 @@
 
 ## 测试棋子
 
-三种棋子属性目前相同：
+阵容：**天辉 = 宙斯 + 4 小兵**（下方），**夜魇 = 混沌骑士 + 4 小兵**（上方）。三种棋子属性目前相同：
 
 | 棋子 | 血量 | 防御 | 移动速度 | 卡牌 |
 |---|---|---|---|---|
@@ -68,6 +68,7 @@ scripts/hud.gd                界面（回合信息、棋子信息、卡牌栏�
 scripts/card_view.gd          卡牌（炉石风格的卡面绘制）
 scripts/camera_controller.gd  摄像机
 scripts/float_text.gd         伤害/治疗飘字
+scripts/background.gd         战场背景（天辉 / 夜魇两套，回合切换时淡入淡出）
 tests/test_rules.gd           规则自动测试
 assets/fonts/                 思源黑体（Noto Sans SC）常用字子集，SIL OFL 1.1 授权
 export_presets.cfg            网页导出配置（单线程，无需特殊响应头）

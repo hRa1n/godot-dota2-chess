@@ -27,14 +27,22 @@ const FOUNTAIN_DAMAGE := 5
 const ENERGY_CELL := Vector2i(5, 5)
 const CAPTURE_TURNS := 2
 
-## 天辉开局布置（夜魇上下镜像）
-const LAYOUT := [
-	["zeus", Vector2i(4, 9)],
-	["chaos_knight", Vector2i(6, 9)],
-	["soldier", Vector2i(2, 8)],
-	["soldier", Vector2i(4, 8)],
-	["soldier", Vector2i(6, 8)],
-	["soldier", Vector2i(8, 8)],
+## 开局布置：[天辉, 夜魇]，坐标为内部 Vector2i(列, 行)
+const LAYOUTS := [
+	[   # 天辉（下）：宙斯 + 4 小兵
+		["zeus", Vector2i(5, 9)],
+		["soldier", Vector2i(2, 8)],
+		["soldier", Vector2i(4, 8)],
+		["soldier", Vector2i(6, 8)],
+		["soldier", Vector2i(8, 8)],
+	],
+	[   # 夜魇（上）：混沌骑士 + 4 小兵
+		["chaos_knight", Vector2i(5, 1)],
+		["soldier", Vector2i(2, 2)],
+		["soldier", Vector2i(4, 2)],
+		["soldier", Vector2i(6, 2)],
+		["soldier", Vector2i(8, 2)],
+	],
 ]
 
 const OVERLAY_MOVE := Color(0.13, 0.65, 0.3, 0.38)
@@ -47,6 +55,8 @@ const DIRS := [Vector2i.LEFT, Vector2i.RIGHT, Vector2i.UP, Vector2i.DOWN]
 @onready var pieces_root: Node2D = $Pieces
 @onready var fx_root: Node2D = $FX
 @onready var hud: Hud = $HUD
+@onready var backgrounds: Array[Control] = [$BackgroundLayer/RadiantBG, $BackgroundLayer/DireBG]
+var _bg_tween: Tween
 
 var pieces: Array[Piece] = []
 var current_team := Team.BLUE
@@ -91,11 +101,9 @@ func _unhandled_input(event: InputEvent) -> void:
 func _spawn_all() -> void:
 	for team in [Team.BLUE, Team.RED]:
 		var soldier_no := 0
-		for entry in LAYOUT:
+		for entry in LAYOUTS[team]:
 			var type_id: String = entry[0]
 			var cell: Vector2i = entry[1]
-			if team == Team.RED:
-				cell = Vector2i(cell.x, Board.ROWS - 1 - cell.y)
 			var name_cn: String = PieceDefs.PIECES[type_id]["name"]
 			if type_id == "soldier":
 				soldier_no += 1
@@ -179,6 +187,7 @@ func _start_turn() -> void:
 	pending_card = ""
 	_log("[b]—— 第 %d 回合 · [color=%s]%s[/color] ——[/b]" % [
 		round_no, TEAM_COLOR[current_team].to_html(false), TEAM_NAME[current_team]])
+	_switch_background(current_team)
 	_fountain_tick(current_team)
 	if _check_win():
 		return
@@ -231,6 +240,15 @@ func _after_action() -> void:
 		return
 	if has_moved and has_used_card:
 		_end_turn_later(0.7)
+
+
+## 回合切换：当前阵营的背景淡入，另一边淡出
+func _switch_background(team: int) -> void:
+	if _bg_tween:
+		_bg_tween.kill()
+	_bg_tween = create_tween().set_parallel()
+	for i in backgrounds.size():
+		_bg_tween.tween_property(backgrounds[i], "modulate:a", 1.0 if i == team else 0.0, 0.6)
 
 
 # ================= 泉水 =================

@@ -21,7 +21,7 @@ const COLOR_GRID := Color("#8fb2d4")
 const COLOR_BORDER := Color("#2f5d8a")
 const COLOR_HOVER := Color(0.1, 0.25, 0.5, 0.18)
 const COLOR_SELECT_LINE := Color("#f59e0b")
-const COLOR_LABEL := Color("#9fb3c8")
+const COLOR_LABEL := Color("#f1f5f9")
 
 var hovered: Vector2i = NO_CELL
 var selected: Vector2i = NO_CELL
@@ -96,6 +96,10 @@ func _unhandled_input(event: InputEvent) -> void:
 
 func _draw() -> void:
 	var size_px := board_size_px()
+
+	# 棋盘底座（阴影 + 木框）
+	draw_rect(Rect2(Vector2(6, 8), size_px), Color(0, 0, 0, 0.35))
+	draw_rect(Rect2(-Vector2(6, 6), size_px + Vector2(12, 12)), Color("#3b2a1a"))
 
 	# 格子：蓝白交错
 	for y in ROWS:
@@ -174,4 +178,6 @@ func _draw() -> void:
 func _draw_centered_text(t: String, center: Vector2, fs: int, col: Color) -> void:
 	var w := FONT.get_string_size(t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x
 	var baseline := center.y + (FONT.get_ascent(fs) - FONT.get_descent(fs)) * 0.5
-	draw_string(FONT, Vector2(center.x - w * 0.5, baseline), t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
+	var pos := Vector2(center.x - w * 0.5, baseline)
+	draw_string_outline(FONT, pos, t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, 4, Color(0, 0, 0, 0.6))
+	draw_string(FONT, pos, t, HORIZONTAL_ALIGNMENT_LEFT, -1, fs, col)
